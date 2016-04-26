@@ -74,8 +74,7 @@ namespace
 	}
 }
 
-VolumetricAnimation::VolumetricAnimation( uint32_t width, uint32_t height, std::wstring name ) :
-	m_DepthBuffer()
+VolumetricAnimation::VolumetricAnimation( uint32_t width, uint32_t height, std::wstring name )
 {
 	m_fenceValue = 0;
 	m_onStageIdx = 0;
@@ -216,8 +215,8 @@ HRESULT VolumetricAnimation::LoadAssets()
 	m_GraphicsPSO.SetDepthStencilState( Graphics::g_DepthStateReadWrite );
 	m_GraphicsPSO.SetSampleMask( UINT_MAX );
 	m_GraphicsPSO.SetPrimitiveTopologyType( D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE );
-	DXGI_FORMAT ColorFormat = Graphics::g_pDisplayPlanes[0].GetFormat();
-	DXGI_FORMAT DepthFormat = m_DepthBuffer.GetFormat();
+	DXGI_FORMAT ColorFormat = Graphics::g_SceneColorBuffer.GetFormat();
+	DXGI_FORMAT DepthFormat = Graphics::g_SceneDepthBuffer.GetFormat();
 	m_GraphicsPSO.SetRenderTargetFormats( 1, &ColorFormat, DepthFormat );
 
 	m_ComputePSO.Finalize();
@@ -260,8 +259,6 @@ HRESULT VolumetricAnimation::LoadSizeDependentResource()
 {
 	uint32_t width = Core::g_config.swapChainDesc.Width;
 	uint32_t height = Core::g_config.swapChainDesc.Height;
-
-	m_DepthBuffer.Create( L"Depth Buffer", width, height, DXGI_FORMAT_D32_FLOAT );
 
 	float fAspectRatio = width / (FLOAT)height;
 	m_camera.Projection( XM_PIDIV2 / 2, fAspectRatio );
@@ -369,15 +366,15 @@ void VolumetricAnimation::OnRender( CommandContext& EngineContext )
 	{
 		GPU_PROFILE( gfxContext, L"Rendering" );
 
-		gfxContext.ClearColor( Graphics::g_pDisplayPlanes[Graphics::g_CurrentDPIdx] );
-		gfxContext.ClearDepth( m_DepthBuffer );
+		gfxContext.ClearColor( Graphics::g_SceneColorBuffer );
+		gfxContext.ClearDepth( Graphics::g_SceneDepthBuffer );
 		gfxContext.SetRootSignature( m_RootSignature );
 		gfxContext.SetPipelineState( m_GraphicsPSO );
 		gfxContext.SetPrimitiveTopology( D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST );
 		gfxContext.TransitionResource( m_VolumeBuffer[m_onStageIdx], D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE );
 		gfxContext.SetDynamicConstantBufferView( 0, sizeof( ConstantBuffer ), m_pConstantBufferData );
 		gfxContext.SetBufferSRV( 1, m_VolumeBuffer[m_onStageIdx] );
-		gfxContext.SetRenderTargets( 1, &Graphics::g_pDisplayPlanes[Graphics::g_CurrentDPIdx], &m_DepthBuffer );
+		gfxContext.SetRenderTargets( 1, &Graphics::g_SceneColorBuffer, &Graphics::g_SceneDepthBuffer );
 		gfxContext.SetViewport( Graphics::g_DisplayPlaneViewPort );
 		gfxContext.SetScisor( Graphics::g_DisplayPlaneScissorRect );
 		gfxContext.SetVertexBuffer( 0, m_VertexBuffer.VertexBufferView() );
@@ -410,7 +407,6 @@ void VolumetricAnimation::OnRender( CommandContext& EngineContext )
 HRESULT VolumetricAnimation::OnSizeChanged()
 {
 	HRESULT hr;
-	m_DepthBuffer.Destroy();
 	VRET( LoadSizeDependentResource() );
 	return S_OK;
 }

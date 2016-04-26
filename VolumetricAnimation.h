@@ -44,7 +44,6 @@ private:
 	float					m_camMaxOribtRadius;
 	float					m_camMinOribtRadius;
 
-	DepthBuffer				m_DepthBuffer;
 	StructuredBuffer		m_VertexBuffer;
 	ByteAddressBuffer		m_IndexBuffer;
 	GraphicsPSO				m_GraphicsPSO;

@@ -4,23 +4,31 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 14.0.24720.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MiniEngine-VolumetricAnimation", "MiniEngine-VolumetricAnimation.vcxproj", "{5D961B44-DD87-4347-BC66-49D3876B0F2E}"
+	ProjectSection(ProjectDependencies) = postProject
+		{0F8AE16C-7913-4786-8379-B8018AF82843} = {0F8AE16C-7913-4786-8379-B8018AF82843}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MiniEngine", "MiniEngine\MiniEngine.vcxproj", "{0F8AE16C-7913-4786-8379-B8018AF82843}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
-		Debug|x86 = Debug|x86
+		Profile|x64 = Profile|x64
 		Release|x64 = Release|x64
-		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{5D961B44-DD87-4347-BC66-49D3876B0F2E}.Debug|x64.ActiveCfg = Debug|x64
 		{5D961B44-DD87-4347-BC66-49D3876B0F2E}.Debug|x64.Build.0 = Debug|x64
-		{5D961B44-DD87-4347-BC66-49D3876B0F2E}.Debug|x86.ActiveCfg = Debug|Win32
-		{5D961B44-DD87-4347-BC66-49D3876B0F2E}.Debug|x86.Build.0 = Debug|Win32
+		{5D961B44-DD87-4347-BC66-49D3876B0F2E}.Profile|x64.ActiveCfg = Profile|x64
+		{5D961B44-DD87-4347-BC66-49D3876B0F2E}.Profile|x64.Build.0 = Profile|x64
 		{5D961B44-DD87-4347-BC66-49D3876B0F2E}.Release|x64.ActiveCfg = Release|x64
 		{5D961B44-DD87-4347-BC66-49D3876B0F2E}.Release|x64.Build.0 = Release|x64
-		{5D961B44-DD87-4347-BC66-49D3876B0F2E}.Release|x86.ActiveCfg = Release|Win32
-		{5D961B44-DD87-4347-BC66-49D3876B0F2E}.Release|x86.Build.0 = Release|Win32
+		{0F8AE16C-7913-4786-8379-B8018AF82843}.Debug|x64.ActiveCfg = Debug|x64
+		{0F8AE16C-7913-4786-8379-B8018AF82843}.Debug|x64.Build.0 = Debug|x64
+		{0F8AE16C-7913-4786-8379-B8018AF82843}.Profile|x64.ActiveCfg = Profile|x64
+		{0F8AE16C-7913-4786-8379-B8018AF82843}.Profile|x64.Build.0 = Profile|x64
+		{0F8AE16C-7913-4786-8379-B8018AF82843}.Release|x64.ActiveCfg = Release|x64
+		{0F8AE16C-7913-4786-8379-B8018AF82843}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
