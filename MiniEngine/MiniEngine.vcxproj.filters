@@ -1,0 +1,155 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="Camera.cpp" />
+    <ClCompile Include="DDSTextureLoader.cpp" />
+    <ClCompile Include="FXAA.cpp" />
+    <ClCompile Include="GPU_Profiler.cpp" />
+    <ClCompile Include="GuiRenderer.cpp" />
+    <ClCompile Include="MsgPrinting.cpp" />
+    <ClCompile Include="TextRenderer.cpp" />
+    <ClCompile Include="Core\CmdListMngr.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\CommandContext.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\CommandSignature.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\DescriptorHeap.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\DX12Framework.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\DynamicDescriptorHeap.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\GpuResource.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\Graphics.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\LibraryHeader.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\LinearAllocator.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\PipelineState.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\RootSignature.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\SamplerMngr.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGUI\imgui.cpp">
+      <Filter>ImGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGUI\imgui_demo.cpp">
+      <Filter>ImGUI</Filter>
+    </ClCompile>
+    <ClCompile Include="ImGUI\imgui_draw.cpp">
+      <Filter>ImGUI</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Camera.h" />
+    <ClInclude Include="dds.h" />
+    <ClInclude Include="DDSTextureLoader.h" />
+    <ClInclude Include="DXHelper.h" />
+    <ClInclude Include="FXAA.h" />
+    <ClInclude Include="GPU_Profiler.h" />
+    <ClInclude Include="GuiRenderer.h" />
+    <ClInclude Include="MsgPrinting.h" />
+    <ClInclude Include="TextRenderer.h" />
+    <ClInclude Include="Utility.h" />
+    <ClInclude Include="Core\CmdListMngr.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\CommandContext.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\CommandSignature.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\d3dx12.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\dds.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\DescriptorHeap.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\DX12Framework.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\DynamicDescriptorHeap.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\GpuResource.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\Graphics.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\LibraryHeader.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\LinearAllocator.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\PipelineState.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\RootSignature.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\SamplerMngr.h">
+      <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGUI\imconfig.h">
+      <Filter>ImGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGUI\imgui.h">
+      <Filter>ImGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGUI\imgui_internal.h">
+      <Filter>ImGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGUI\stb_rect_pack.h">
+      <Filter>ImGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGUI\stb_textedit.h">
+      <Filter>ImGUI</Filter>
+    </ClInclude>
+    <ClInclude Include="ImGUI\stb_truetype.h">
+      <Filter>ImGUI</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="FXAA.hlsl" />
+    <FxCompile Include="GPU_Profiler.hlsl" />
+    <FxCompile Include="TextRenderer.hlsl" />
+    <FxCompile Include="Core\Graphics.hlsl">
+      <Filter>Core</Filter>
+    </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FXAA_SharedHeader.inl" />
+    <None Include="TextRenderer_SharedHeader.inl" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Core">
+      <UniqueIdentifier>{996dd71c-6546-48c2-a091-71f0638c4435}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ImGUI">
+      <UniqueIdentifier>{6db34f5d-8d3f-436c-a064-7089ba4fd58e}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
