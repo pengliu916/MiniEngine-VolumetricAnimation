@@ -47,10 +47,12 @@ private:
 	StructuredBuffer		m_VertexBuffer;
 	ByteAddressBuffer		m_IndexBuffer;
 	GraphicsPSO				m_GraphicsPSO;
-	GraphicsPSO				m_GraphicsComputePSO;
+	GraphicsPSO				m_GraphicsPSOTyped;
 	ComputePSO				m_ComputePSO;
+	ComputePSO				m_ComputePSOTyped;
 	RootSignature			m_RootSignature;
 	StructuredBuffer		m_VolumeBuffer[2];
+	TypedBuffer				m_TypedVolumeBuffer[2] = {DXGI_FORMAT_R8G8B8A8_UINT,DXGI_FORMAT_R8G8B8A8_UINT};
 
 	OrbitCamera				m_camera;
 	struct ConstantBuffer*	m_pConstantBufferData;

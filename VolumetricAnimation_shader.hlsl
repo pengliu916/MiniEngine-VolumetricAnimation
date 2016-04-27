@@ -1,11 +1,15 @@
-#include "D3DX_DXGIFormatConvert.inl"// this file provide utility funcs for format conversion
 #include "VolumetricAnimation_SharedHeader.inl"
-
+#if !TYPED_UAV
+#include "D3DX_DXGIFormatConvert.inl"// this file provide utility funcs for format conversion
+#endif
 SamplerState samRaycast : register(s0);
+#if TYPED_UAV
+Buffer<uint4> g_bufVolumeSRV : register(t0);
+#else
 StructuredBuffer<uint> g_bufVolumeSRV : register(t0);
-RWStructuredBuffer<uint> g_bufVolumeUAV : register(u0);
-
+#endif // TYPED_UAV
 static const float density = 0.02;
+
 
 //--------------------------------------------------------------------------------------
 // Structures
@@ -21,6 +25,48 @@ struct Ray
 	float4 d;
 };
 
+#if COMPUTE_SHADER
+#if TYPED_UAV
+RWBuffer<uint4> g_bufVolumeUAV : register(u0);
+#else
+RWStructuredBuffer<uint> g_bufVolumeUAV : register(u0);
+#endif // TYPED_UAV
+[numthreads( THREAD_X, THREAD_Y, THREAD_Z )]
+void csmain( uint3 DTid: SV_DispatchThreadID, uint Tid : SV_GroupIndex )
+{
+#if TYPED_UAV
+	uint4 col = g_bufVolumeUAV[DTid.x + DTid.y*voxelResolution.x + DTid.z*voxelResolution.x*voxelResolution.y];
+#else
+	uint4 col = D3DX_R8G8B8A8_UINT_to_UINT4( g_bufVolumeUAV[DTid.x + DTid.y*voxelResolution.x + DTid.z*voxelResolution.x*voxelResolution.y] );
+#endif // TYPED_UAV
+	col.xyz -= shiftingColVals[col.w].xyz;
+
+	uint3 delta = col.xyz - bgCol.xyz;
+	if (dot( delta, delta ) < 0.8)
+	{
+		col.w = (col.w + 1) % COLOR_COUNT;
+		col.xyz = (255 - bgCol.w) * shiftingColVals[col.w].xyz + bgCol.xyz;
+	}
+#if TYPED_UAV
+	g_bufVolumeUAV[DTid.x + DTid.y*voxelResolution.x + DTid.z*voxelResolution.x*voxelResolution.y] = col;
+#else
+	g_bufVolumeUAV[DTid.x + DTid.y*voxelResolution.x + DTid.z*voxelResolution.x*voxelResolution.y] = D3DX_UINT4_to_R8G8B8A8_UINT( col );
+#endif // TYPED_UAV
+}
+#endif // COMPUTE_SHADER
+
+#if VERTEX_SHADER
+VSOutput vsmain( float4 pos : POSITION )
+{
+	VSOutput vsout = (VSOutput)0;
+	pos.xyz *= voxelResolution;
+	vsout.ProjPos = mul( wvp, pos );
+	vsout.Pos = pos;
+	return vsout;
+}
+#endif // VERTEX_SHADER
+
+#if PIXEL_SHADER
 //--------------------------------------------------------------------------------------
 // Utility Functions
 //--------------------------------------------------------------------------------------
@@ -44,17 +90,6 @@ bool IntersectBox( Ray r, float3 boxmin, float3 boxmax, out float tnear, out flo
 	return tnear <= tfar;
 }
 
-//--------------------------------------------------------------------------------------
-// Vertex Shader
-//--------------------------------------------------------------------------------------
-VSOutput vsmain( float4 pos : POSITION )
-{
-	VSOutput vsout = (VSOutput)0;
-	pos.xyz *= voxelResolution;
-	vsout.ProjPos = mul( wvp, pos );
-	vsout.Pos = pos;
-	return vsout;
-}
 
 //--------------------------------------------------------------------------------------
 // Pixel Shader
@@ -89,7 +124,11 @@ float4 psmain( VSOutput input ) : SV_TARGET
 	float3 currentPixPos;
 	while (t <= tfar) {
 		uint3 idx = P / VOLUME_SIZE_SCALE + voxelResolution * 0.5 - 0.01f; // -0.01f to avoid incorrect float->int jump
+#if TYPED_UAV
+		float4 value = g_bufVolumeSRV[idx.x + idx.y*voxelResolution.x + idx.z*voxelResolution.y * voxelResolution.x] / 255.f;
+#else
 		float4 value = D3DX_R8G8B8A8_UINT_to_UINT4( g_bufVolumeSRV[idx.x + idx.y*voxelResolution.x + idx.z*voxelResolution.y * voxelResolution.x] ) / 255.f;
+#endif //TYPED_UAV
 		output += value * density;
 
 		P += PsmallStep;
@@ -97,21 +136,5 @@ float4 psmain( VSOutput input ) : SV_TARGET
 	}
 	return output;
 }
+#endif // PIXEL_SHADER
 
-//--------------------------------------------------------------------------------------
-// Compute Shader
-//--------------------------------------------------------------------------------------
-[numthreads( THREAD_X, THREAD_Y, THREAD_Z )]
-void csmain( uint3 DTid: SV_DispatchThreadID, uint Tid : SV_GroupIndex )
-{
-	uint4 col = D3DX_R8G8B8A8_UINT_to_UINT4( g_bufVolumeUAV[DTid.x + DTid.y*voxelResolution.x + DTid.z*voxelResolution.x*voxelResolution.y] );
-	col.xyz -= shiftingColVals[col.w].xyz;
-
-	uint3 delta = col.xyz - bgCol.xyz;
-	if (dot( delta, delta ) < 0.8)
-	{
-		col.w = (col.w + 1) % COLOR_COUNT;
-		col.xyz = (255 - bgCol.w) * shiftingColVals[col.w].xyz + bgCol.xyz;
-	}
-	g_bufVolumeUAV[DTid.x + DTid.y*voxelResolution.x + DTid.z*voxelResolution.x*voxelResolution.y] = D3DX_UINT4_to_R8G8B8A8_UINT( col );
-}
