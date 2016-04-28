@@ -7453,6 +7453,8 @@ void TextContext::SetRenderState( void )
 	if (nullptr == m_CurrentFont)
 		PRINTWARN( "Attempted to draw text without a font" );
 
+	m_Context.SetRenderTargets( 1, &Graphics::g_pDisplayPlanes[Graphics::g_CurrentDPIdx] );
+
 	if (m_VSConstantBufferIsStale)
 	{
 		m_Context.SetDynamicConstantBufferView( 0, sizeof( m_VSParams ), &m_VSParams );
