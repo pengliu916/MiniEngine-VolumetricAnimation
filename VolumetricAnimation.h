@@ -32,17 +32,17 @@ private:
 		XMFLOAT3 position;
 	};
 
-	uint8_t					m_onStageIdx;
-	int						m_selectedVolumeSize;
-	int						m_OneContext;
-	int						m_SphereAnimation;
-	uint64_t				m_fenceValue;
+	int						m_selectedVolumeSize = 256;
+	int						m_OneContext = 1;
+	int						m_UseTypedBuffer = 0;
+
+	int						m_SphereAnimation = 0;
 	uint32_t				m_width;
 	uint32_t				m_height;
 
-	float					m_camOrbitRadius;
-	float					m_camMaxOribtRadius;
-	float					m_camMinOribtRadius;
+	float					m_camOrbitRadius = 10.f;
+	float					m_camMaxOribtRadius = 100.f;
+	float					m_camMinOribtRadius = 2.f;
 
 	StructuredBuffer		m_VertexBuffer;
 	ByteAddressBuffer		m_IndexBuffer;
@@ -57,9 +57,9 @@ private:
 	OrbitCamera				m_camera;
 	struct ConstantBuffer*	m_pConstantBufferData;
 
-	uint32_t				m_volumeWidth;
-	uint32_t				m_volumeHeight;
-	uint32_t				m_volumeDepth;
+	uint32_t				m_volumeWidth = m_selectedVolumeSize;
+	uint32_t				m_volumeHeight = m_selectedVolumeSize;
+	uint32_t				m_volumeDepth = m_selectedVolumeSize;
 
 	HRESULT LoadAssets();
 	HRESULT LoadSizeDependentResource();

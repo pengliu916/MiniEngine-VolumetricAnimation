@@ -1,41 +1,24 @@
 #include "VolumetricAnimation_SharedHeader.inl"
-#if !TYPED_UAV
-#include "D3DX_DXGIFormatConvert.inl"// this file provide utility funcs for format conversion
-#endif
-SamplerState samRaycast : register(s0);
-#if TYPED_UAV
-Buffer<uint4> g_bufVolumeSRV : register(t0);
-#else
-StructuredBuffer<uint> g_bufVolumeSRV : register(t0);
-#endif // TYPED_UAV
-static const float density = 0.02;
-
-
-//--------------------------------------------------------------------------------------
-// Structures
-//--------------------------------------------------------------------------------------
-struct VSOutput {
-	float4 ProjPos : SV_POSITION;
-	float4 Pos : COLOR;
-};
-
-struct Ray
-{
-	float4 o;
-	float4 d;
-};
 
 #if COMPUTE_SHADER
 #if TYPED_UAV
 RWBuffer<uint4> g_bufVolumeUAV : register(u0);
+#if TYPED_LOAD_NOT_SUPPORTED
+Buffer<uint4> g_bufVolumeSRV : register(t0);
+#endif //TYPED_LOAD_NOT_SUPPORTED
 #else
+#include "D3DX_DXGIFormatConvert.inl"// this file provide utility funcs for format conversion
 RWStructuredBuffer<uint> g_bufVolumeUAV : register(u0);
 #endif // TYPED_UAV
 [numthreads( THREAD_X, THREAD_Y, THREAD_Z )]
 void csmain( uint3 DTid: SV_DispatchThreadID, uint Tid : SV_GroupIndex )
 {
 #if TYPED_UAV
+#if TYPED_LOAD_NOT_SUPPORTED
+	uint4 col = g_bufVolumeSRV[DTid.x + DTid.y*voxelResolution.x + DTid.z*voxelResolution.x*voxelResolution.y];
+#else
 	uint4 col = g_bufVolumeUAV[DTid.x + DTid.y*voxelResolution.x + DTid.z*voxelResolution.x*voxelResolution.y];
+#endif // TYPED_LOAD_NOT_SUPPORTED
 #else
 	uint4 col = D3DX_R8G8B8A8_UINT_to_UINT4( g_bufVolumeUAV[DTid.x + DTid.y*voxelResolution.x + DTid.z*voxelResolution.x*voxelResolution.y] );
 #endif // TYPED_UAV
@@ -56,6 +39,10 @@ void csmain( uint3 DTid: SV_DispatchThreadID, uint Tid : SV_GroupIndex )
 #endif // COMPUTE_SHADER
 
 #if VERTEX_SHADER
+struct VSOutput {
+	float4 ProjPos : SV_POSITION;
+	float4 Pos : COLOR;
+};
 VSOutput vsmain( float4 pos : POSITION )
 {
 	VSOutput vsout = (VSOutput)0;
@@ -67,6 +54,26 @@ VSOutput vsmain( float4 pos : POSITION )
 #endif // VERTEX_SHADER
 
 #if PIXEL_SHADER
+#if TYPED_UAV
+Buffer<uint4> g_bufVolumeSRV : register(t0);
+#else
+#include "D3DX_DXGIFormatConvert.inl"// this file provide utility funcs for format conversion
+StructuredBuffer<uint> g_bufVolumeSRV : register(t0);
+#endif // TYPED_UAV
+SamplerState samRaycast : register(s0);
+static const float density = 0.02;
+
+struct VSOutput {
+	float4 ProjPos : SV_POSITION;
+	float4 Pos : COLOR;
+};
+
+struct Ray
+{
+	float4 o;
+	float4 d;
+};
+
 //--------------------------------------------------------------------------------------
 // Utility Functions
 //--------------------------------------------------------------------------------------
@@ -89,7 +96,6 @@ bool IntersectBox( Ray r, float3 boxmin, float3 boxmax, out float tnear, out flo
 
 	return tnear <= tfar;
 }
-
 
 //--------------------------------------------------------------------------------------
 // Pixel Shader

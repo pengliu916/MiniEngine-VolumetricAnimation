@@ -16,18 +16,19 @@ namespace
 		int sphereAnim;
 	};
 
-	bool _inTransaction;
-	bool _needRecordFenceValue;
-	bool _ready2DestoryOldBuf;
+	bool					_TypedLoadSupported = false;
+	uint64_t				_fenceValue = 0;
+	uint8_t					_onStageIdx = 0;
+	bool					_inTransaction = false;
+	bool					_needRecordFenceValue = false;
+	bool					_ready2DestoryOldBuf = false;
 
-	int _readyBufferIdx; // 0 for structured buffer, 1 for typed buffer
-	int _useTypedBuffer;
-	bool _switchingBuffer;
+	bool					_switchingBuffer = false;
+	int						_readyBufferIdx ; // 0 for structured buffer, 1 for typed buffer
 
-	uint64_t _fenceValue;
-	std::atomic<bool> _bufferReady;
-	VolumeConfig _volConfig;
-	uint8_t* _bufPtr;
+	std::atomic<bool>		_bufferReady(false);
+	VolumeConfig			_volConfig;
+	uint8_t*				_bufPtr;
 
 	void PrepareBuffer( VolumeConfig& volConfig )
 	{
@@ -82,24 +83,7 @@ namespace
 
 VolumetricAnimation::VolumetricAnimation( uint32_t width, uint32_t height, std::wstring name )
 {
-	_useTypedBuffer = false;
-
-	m_fenceValue = 0;
-	m_onStageIdx = 0;
-	m_OneContext = 0;
-	m_SphereAnimation = 0;
-	m_selectedVolumeSize = 256;
-	m_volumeWidth = m_selectedVolumeSize;
-	m_volumeHeight = m_selectedVolumeSize;
-	m_volumeDepth = m_selectedVolumeSize;
-
-	_switchingBuffer = false;
-	_readyBufferIdx = 0;
-	_ready2DestoryOldBuf = false;
-	_inTransaction = false;
-	_needRecordFenceValue = false;
-	_fenceValue = 0;
-	_bufferReady.store( false );
+	_readyBufferIdx = m_UseTypedBuffer;
 
 	m_pConstantBufferData = new ConstantBuffer();
 	m_pConstantBufferData->bgCol = XMINT4( 32, 32, 32, 32 );
@@ -116,10 +100,6 @@ VolumetricAnimation::VolumetricAnimation( uint32_t width, uint32_t height, std::
 
 	m_width = width;
 	m_height = height;
-
-	m_camOrbitRadius = 10.f;
-	m_camMaxOribtRadius = 100.f;
-	m_camMinOribtRadius = 2.f;
 
 #if !STATIC_ARRAY
 	for (uint32_t i = 0; i < ARRAY_COUNT( shiftingColVals ); i++)
@@ -168,17 +148,14 @@ HRESULT VolumetricAnimation::OnCreateResource()
 			hr = Graphics::g_device->CheckFeatureSupport( D3D12_FEATURE_FORMAT_SUPPORT, &FormatSupport, sizeof( FormatSupport ) );
 			if (SUCCEEDED( hr ) && (FormatSupport.Support2 & D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD) != 0)
 			{
-				PRINTWARN( "DXGI_FORMAT_R8G8B8A8_UINT typed load is supported" );
+				PRINTINFO( "DXGI_FORMAT_R8G8B8A8_UINT typed load is supported" );
+				_TypedLoadSupported = true;
 			}
 			else
-			{
-				PRINTERROR( "DXGI_FORMAT_R8G8B8A8_UINT typed load is not supported" );
-			}
+				PRINTWARN( "DXGI_FORMAT_R8G8B8A8_UINT typed load is not supported" );
 		}
 		else
-		{
-			PRINTERROR( "TypedUAVLoadAdditionalFormats load is not supported" );
-		}
+			PRINTWARN( "TypedUAVLoadAdditionalFormats load is not supported" );
 	}
 
 	VRET( LoadSizeDependentResource() );
@@ -249,6 +226,7 @@ HRESULT VolumetricAnimation::LoadAssets()
 		{ "PIXEL_SHADER",	"0" },	// 2 
 		{ "COMPUTE_SHADER",	"0"},	// 3
 		{ "TYPED_UAV",		"0" },	// 4
+		{ "TYPED_LOAD_NOT_SUPPORTED", _TypedLoadSupported ? "0" : "1" },	// 5
 		{ nullptr,		nullptr }
 	};
 	VRET( Graphics::CompileShaderFromFile( Core::GetAssetFullPath( _T( "VolumetricAnimation_shader.hlsl" ) ).c_str(), macro, D3D_COMPILE_STANDARD_FILE_INCLUDE, "vsmain", "vs_5_0", compileFlags, 0, &vertexShader ) );
@@ -276,10 +254,10 @@ HRESULT VolumetricAnimation::LoadAssets()
 	m_GraphicsPSOTyped.Finalize();
 
 	uint32_t volumeBufferElementCount = m_volumeDepth*m_volumeHeight*m_volumeWidth;
-	if (_useTypedBuffer)
-		m_TypedVolumeBuffer[m_onStageIdx].Create( L"Typed Volume Buf", volumeBufferElementCount, 4 * sizeof( uint8_t ) );
+	if (m_UseTypedBuffer)
+		m_TypedVolumeBuffer[_onStageIdx].Create( L"Typed Volume Buf", volumeBufferElementCount, 4 * sizeof( uint8_t ) );
 	else
-		m_VolumeBuffer[m_onStageIdx].Create( L"Volume Buffer", volumeBufferElementCount, 4 * sizeof( uint8_t ) );
+		m_VolumeBuffer[_onStageIdx].Create( L"Volume Buffer", volumeBufferElementCount, 4 * sizeof( uint8_t ) );
 
 	// Define the geometry for a triangle.
 	Vertex cubeVertices[] =
@@ -328,13 +306,13 @@ void VolumetricAnimation::OnUpdate()
 	if (ImGui::Begin( "VolumetricAnimation", &showPenal ))
 	{
 		ImGui::Text( "Buffer Settings:" );
-		static int uBufferChoice = _useTypedBuffer;
+		static int uBufferChoice = m_UseTypedBuffer;
 		ImGui::RadioButton( "Use Typed Buffer", &uBufferChoice, 1 );
 		ImGui::RadioButton( "Use Structured Buffer", &uBufferChoice, 0 );
-		if (!_inTransaction && uBufferChoice != _useTypedBuffer)
+		if (!_inTransaction && uBufferChoice != m_UseTypedBuffer)
 		{
 			_inTransaction = true;
-			_useTypedBuffer = uBufferChoice;
+			m_UseTypedBuffer = uBufferChoice;
 			_switchingBuffer = true;
 			std::thread threadCreateVolume( &SwapVolume, _volConfig );
 			threadCreateVolume.detach();
@@ -385,11 +363,11 @@ void VolumetricAnimation::OnUpdate()
 			_bufferReady.store( false );
 
 			uint32_t bufferElementCount = _volConfig.width * _volConfig.height * _volConfig.depth;
-			if (_useTypedBuffer == 0)
-				m_VolumeBuffer[1 - m_onStageIdx].Create( L"Volume Buffer", bufferElementCount, 4 * sizeof( uint8_t ), _bufPtr );
+			if (m_UseTypedBuffer == 0)
+				m_VolumeBuffer[1 - _onStageIdx].Create( L"Volume Buffer", bufferElementCount, 4 * sizeof( uint8_t ), _bufPtr );
 			else
-				m_TypedVolumeBuffer[1 - m_onStageIdx].Create( L"Typed Volume Buf", bufferElementCount, 4 * sizeof( uint8_t ), _bufPtr );
-			m_onStageIdx = 1 - m_onStageIdx;
+				m_TypedVolumeBuffer[1 - _onStageIdx].Create( L"Typed Volume Buf", bufferElementCount, 4 * sizeof( uint8_t ), _bufPtr );
+			_onStageIdx = 1 - _onStageIdx;
 
 			if (_switchingBuffer)
 				_readyBufferIdx = 1 - _readyBufferIdx;
@@ -413,17 +391,17 @@ void VolumetricAnimation::OnUpdate()
 			if (_switchingBuffer)
 			{
 				_switchingBuffer = false;
-				if (_useTypedBuffer == 1)
-					m_VolumeBuffer[1 - m_onStageIdx].Destroy();
+				if (m_UseTypedBuffer == 1)
+					m_VolumeBuffer[1 - _onStageIdx].Destroy();
 				else
-					m_TypedVolumeBuffer[1 - m_onStageIdx].Destroy();
+					m_TypedVolumeBuffer[1 - _onStageIdx].Destroy();
 			}
 			else
 			{
-				if (_useTypedBuffer == 0)
-					m_VolumeBuffer[1 - m_onStageIdx].Destroy();
+				if (m_UseTypedBuffer == 0)
+					m_VolumeBuffer[1 - _onStageIdx].Destroy();
 				else
-					m_TypedVolumeBuffer[1 - m_onStageIdx].Destroy();
+					m_TypedVolumeBuffer[1 - _onStageIdx].Destroy();
 			}
 			_inTransaction = false;
 		}
@@ -441,7 +419,7 @@ void VolumetricAnimation::OnRender( CommandContext& EngineContext )
 	m_pConstantBufferData->wvp = XMMatrixMultiply( XMMatrixMultiply( world, view ), proj );
 	XMStoreFloat4( &m_pConstantBufferData->viewPos, m_camera.Eye() );
 
-	GpuBuffer* VolumeBuffer = (_readyBufferIdx == 0 ? (GpuBuffer*)&m_VolumeBuffer[m_onStageIdx] : (GpuBuffer*)&m_TypedVolumeBuffer[m_onStageIdx]);
+	GpuBuffer* VolumeBuffer = (_readyBufferIdx == 0 ? (GpuBuffer*)&m_VolumeBuffer[_onStageIdx] : (GpuBuffer*)&m_TypedVolumeBuffer[_onStageIdx]);
 	ComputeContext& cptContext = m_OneContext ? EngineContext.GetComputeContext() : ComputeContext::Begin( L"Update Volume" );
 	{
 		GPU_PROFILE( cptContext, L"Volume Updating" );
@@ -449,14 +427,14 @@ void VolumetricAnimation::OnRender( CommandContext& EngineContext )
 		cptContext.SetPipelineState( _readyBufferIdx == 0 ? m_ComputePSO : m_ComputePSOTyped );
 		cptContext.TransitionResource( *VolumeBuffer, D3D12_RESOURCE_STATE_UNORDERED_ACCESS );
 		cptContext.SetDynamicConstantBufferView( 0, sizeof( ConstantBuffer ), m_pConstantBufferData );
-		//cptContext.SetBufferUAV( 2, *VolumeBuffer );
+		cptContext.SetDynamicDescriptors( 1, 0, 1, &VolumeBuffer->GetSRV() );
 		cptContext.SetDynamicDescriptors( 2, 0, 1, &VolumeBuffer->GetUAV() );
 		cptContext.Dispatch( m_volumeWidth / THREAD_X, m_volumeHeight / THREAD_Y, m_volumeDepth / THREAD_Z );
 	}
 	if (!m_OneContext)
 	{
-		Graphics::g_cmdListMngr.GetQueue( D3D12_COMMAND_LIST_TYPE_DIRECT ).WaitForFence( m_fenceValue );
-		m_fenceValue = cptContext.Finish();
+		Graphics::g_cmdListMngr.GetQueue( D3D12_COMMAND_LIST_TYPE_DIRECT ).WaitForFence( _fenceValue );
+		_fenceValue = cptContext.Finish();
 	}
 
 	GraphicsContext& gfxContext = m_OneContext ? EngineContext.GetGraphicsContext() : GraphicsContext::Begin( L"Render Volume" );
@@ -470,8 +448,8 @@ void VolumetricAnimation::OnRender( CommandContext& EngineContext )
 		gfxContext.SetPrimitiveTopology( D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST );
 		gfxContext.TransitionResource( *VolumeBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE );
 		gfxContext.SetDynamicConstantBufferView( 0, sizeof( ConstantBuffer ), m_pConstantBufferData );
-		//gfxContext.SetBufferSRV( 1, *VolumeBuffer );
 		gfxContext.SetDynamicDescriptors( 1, 0, 1, &VolumeBuffer->GetSRV() );
+		gfxContext.SetDynamicDescriptors( 2, 0, 1, &VolumeBuffer->GetUAV() );
 		gfxContext.SetRenderTargets( 1, &Graphics::g_SceneColorBuffer, &Graphics::g_SceneDepthBuffer );
 		gfxContext.SetViewport( Graphics::g_DisplayPlaneViewPort );
 		gfxContext.SetScisor( Graphics::g_DisplayPlaneScissorRect );
@@ -497,8 +475,8 @@ void VolumetricAnimation::OnRender( CommandContext& EngineContext )
 
 	if (!m_OneContext)
 	{
-		Graphics::g_cmdListMngr.GetQueue( D3D12_COMMAND_LIST_TYPE_DIRECT ).WaitForFence( m_fenceValue );
-		m_fenceValue = gfxContext.Finish();
+		//Graphics::g_cmdListMngr.GetQueue( D3D12_COMMAND_LIST_TYPE_DIRECT ).WaitForFence( _fenceValue );
+		_fenceValue = gfxContext.Finish();
 	}
 }
 
