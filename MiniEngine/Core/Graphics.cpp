@@ -140,8 +140,6 @@ namespace Graphics
 
 	void Shutdown()
 	{
-		g_cmdListMngr.IdleGPU();
-
 		GuiRenderer::Shutdown();
 		FXAA::Shutdown();
 
@@ -523,7 +521,7 @@ namespace Graphics
 #endif
 
 		Context.TransitionResource( g_pDisplayPlanes[g_CurrentDPIdx], D3D12_RESOURCE_STATE_PRESENT );
-		Context.Finish();
+		g_stats.lastFrameEndFence = Context.Finish();
 
 		DXGI_PRESENT_PARAMETERS param;
 		param.DirtyRectsCount = 0;
@@ -569,13 +567,6 @@ namespace Graphics
 			ImGui::Text( "RenderThread Stall Count: %d/frame  Time:%4.2fms", Graphics::g_stats.cpuStallCountPerFrame, Graphics::g_stats.cpuStallTimePerFrame );
 			Graphics::g_stats.cpuStallCountPerFrame = 0;
 			Graphics::g_stats.cpuStallTimePerFrame = 0;
-		}
-		if (ImGui::CollapsingHeader( "Render Targets" ))
-		{
-			ImTextureID tex_id = (void*)&Graphics::g_SceneColorBuffer.GetSRV();
-			ImGui::Image( tex_id, ImVec2( 640, 480 ) ); 
-			ImTextureID tex_id1 = (void*)&FXAA::g_LumaBuffer.GetSRV();
-			ImGui::Image( tex_id1, ImVec2( 640, 480 ) );
 		}
 	}
 }

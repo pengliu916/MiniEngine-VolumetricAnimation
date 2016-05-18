@@ -475,10 +475,20 @@ void GraphicsContext::SetViewport( const D3D12_VIEWPORT& vp )
 	m_CommandList->RSSetViewports( 1, &vp );
 }
 
+void GraphicsContext::SetViewports( UINT NumVPs, const D3D12_VIEWPORT* vps )
+{
+	m_CommandList->RSSetViewports( NumVPs, vps );
+}
+
 void GraphicsContext::SetScisor( const D3D12_RECT& rect )
 {
 	ASSERT( rect.left < rect.right && rect.top < rect.bottom );
 	m_CommandList->RSSetScissorRects( 1, &rect );
+}
+
+void GraphicsContext::SetScisors( UINT NumScisor, const D3D12_RECT* rects )
+{
+	m_CommandList->RSSetScissorRects( NumScisor, rects );
 }
 
 //--------------------------------------------------------------------------------------

@@ -349,7 +349,6 @@ void GuiRenderer::Render( GraphicsContext& gfxContext )
 		Graphics::UpdateGUI();
 		FXAA::UpdateGUI();
 	}
-	ImGui::ShowTestWindow();
 	ImGui::End();
 	ImGui::Render();
 	ImGuiRender( ImGui::GetDrawData(), gfxContext );

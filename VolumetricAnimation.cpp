@@ -125,6 +125,7 @@ void VolumetricAnimation::ResetCameraView()
 
 void VolumetricAnimation::OnConfiguration()
 {
+	Core::g_config.FXAA = false;
 	Core::g_config.swapChainDesc.BufferCount = 5;
 	Core::g_config.swapChainDesc.Width = m_width;
 	Core::g_config.swapChainDesc.Height = m_height;

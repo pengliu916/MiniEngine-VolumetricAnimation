@@ -133,23 +133,21 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="FXAA.hlsl" />
-    <FxCompile Include="GPU_Profiler.hlsl" />
-    <FxCompile Include="TextRenderer.hlsl" />
-    <FxCompile Include="Core\Graphics.hlsl">
-      <Filter>Core</Filter>
-    </FxCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="FXAA_SharedHeader.inl" />
-    <None Include="TextRenderer_SharedHeader.inl" />
-  </ItemGroup>
-  <ItemGroup>
     <Filter Include="Core">
       <UniqueIdentifier>{996dd71c-6546-48c2-a091-71f0638c4435}</UniqueIdentifier>
     </Filter>
     <Filter Include="ImGUI">
       <UniqueIdentifier>{6db34f5d-8d3f-436c-a064-7089ba4fd58e}</UniqueIdentifier>
     </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="FXAA.hlsl" />
+    <CustomBuild Include="GPU_Profiler.hlsl" />
+    <CustomBuild Include="TextRenderer.hlsl" />
+    <CustomBuild Include="FXAA_SharedHeader.inl" />
+    <CustomBuild Include="TextRenderer_SharedHeader.inl" />
+    <CustomBuild Include="Core\Graphics.hlsl">
+      <Filter>Core</Filter>
+    </CustomBuild>
   </ItemGroup>
 </Project>

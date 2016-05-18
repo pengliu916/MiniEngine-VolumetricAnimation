@@ -185,6 +185,7 @@ namespace Core
 
 	void FrameworkDestory( IDX12Framework& application )
 	{
+		Graphics::g_cmdListMngr.IdleGPU();
 		application.OnDestroy();
 		Graphics::Shutdown();
 		MsgPrinting::Destory();
