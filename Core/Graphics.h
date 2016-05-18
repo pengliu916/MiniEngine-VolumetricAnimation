@@ -20,6 +20,7 @@ namespace Graphics
 		uint16_t						allocatorReady[4] = {};
 		uint16_t						cpuStallCountPerFrame = 0;
 		double							cpuStallTimePerFrame = 0;
+		uint64_t						lastFrameEndFence = 0;
 	};
 
 	extern Stats									g_stats;

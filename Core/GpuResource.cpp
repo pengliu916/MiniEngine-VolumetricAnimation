@@ -5,6 +5,8 @@
 #include "Utility.h"
 #include "DDSTextureLoader.h"
 #include "GpuResource.h"
+#include "imgui.h"
+#include <atlbase.h>
 
 //--------------------------------------------------------------------------------------
 // PixelBuffer
@@ -67,9 +69,14 @@ void PixelBuffer::CreateTextureResource( ID3D12Device* Device, const std::wstrin
 	HRESULT hr;
 	V( Device->CreateCommittedResource( &HeapProps, D3D12_HEAP_FLAG_NONE, &ResourceDesc,
 		D3D12_RESOURCE_STATE_COMMON, &ClearValue, IID_PPV_ARGS( &m_pResource ) ) );
-
+#ifdef RELEASE
+	( Name );
+#else
+	m_pResource->SetName( Name.c_str() );
+#endif
 	m_UsageState = D3D12_RESOURCE_STATE_COMMON;
 	m_GpuVirtualAddress = D3D12_GPU_VIRTUAL_ADDRESS_NULL;
+	m_Name = Name;
 }
 
 DXGI_FORMAT PixelBuffer::GetBaseFormat( DXGI_FORMAT defaultFormat )
@@ -290,6 +297,37 @@ void ColorBuffer::Create( const std::wstring& Name, uint32_t Width, uint32_t Hei
 
 	CreateTextureResource( Graphics::g_device.Get(), Name, ResourceDesc, ClearValue, VidMemPtr );
 	CreateDerivedViews( Graphics::g_device.Get(), Format, 1, NumMips );
+}
+
+void ColorBuffer::GuiShow()
+{
+	USES_CONVERSION;
+	if (ImGui::Begin( W2A(m_Name.c_str()), &m_GuiOpen))
+	{
+		ImTextureID tex_id = (void*)&this->GetSRV();
+		uint32_t OrigTexWidth = this->GetWidth();
+		uint32_t OrigTexHeight = this->GetHeight();
+
+		ImGuiStyle& style = ImGui::GetStyle();
+		char temp[64];
+		sprintf( temp, "Native Reso:%dx%d", OrigTexWidth, OrigTexHeight );
+		ImGui::Checkbox( temp, &m_GuiNativeReso );
+		float height = ImGui::GetWindowHeight();
+		float AdaptedTexHeight = ImGui::GetContentRegionAvail().y;
+		float AdaptedTexWidth = AdaptedTexHeight *OrigTexWidth / OrigTexHeight;
+
+		if (m_GuiNativeReso)
+		{
+			ImGui::Image( tex_id, ImVec2( (float)OrigTexWidth, (float)OrigTexHeight ) );
+			ImGui::SetWindowSize( ImVec2( 0, 0 ) );
+		}
+		else
+		{
+			ImGui::Image( tex_id, ImVec2( AdaptedTexWidth, AdaptedTexHeight ) );
+			ImGui::SetWindowSize( ImVec2( AdaptedTexWidth + 2.f * style.WindowPadding.x, height > 240.f ? height : 240.f ) );
+		}
+	}
+	ImGui::End();
 }
 
 void ColorBuffer::CreateDerivedViews( ID3D12Device* Device, DXGI_FORMAT Format, uint32_t ArraySize, uint32_t NumMips /* = 1 */ )

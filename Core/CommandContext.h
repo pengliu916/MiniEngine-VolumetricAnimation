@@ -231,7 +231,9 @@ public:
 	void SetRootSignature( const RootSignature& RootSig );
 	void SetRenderTargets( UINT NumRTVs, ColorBuffer* RTVs, DepthBuffer* DSV = nullptr, bool ReadOnlyDepth = false );
 	void SetViewport( const D3D12_VIEWPORT& vp );
+	void SetViewports( UINT NumVPs, const D3D12_VIEWPORT* vps );
 	void SetScisor( const D3D12_RECT& rect );
+	void SetScisors( UINT NumScisor, const D3D12_RECT* rects );
 	void SetPrimitiveTopology( D3D12_PRIMITIVE_TOPOLOGY Topology );
 	void SetPipelineState( const GraphicsPSO& PSO );
 	void SetConstants( UINT RootIndex, UINT NumConstants, const void* pConstants );
