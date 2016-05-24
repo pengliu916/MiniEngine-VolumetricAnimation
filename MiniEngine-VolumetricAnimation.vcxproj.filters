@@ -4,14 +4,29 @@
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="VolumetricAnimation.cpp" />
+    <ClCompile Include="DenseVolume.cpp">
+      <Filter>DenseVolume</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="VolumetricAnimation.h" />
+    <ClInclude Include="DenseVolume.h">
+      <Filter>DenseVolume</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="D3DX_DXGIFormatConvert.inl" />
-    <CustomBuild Include="VolumetricAnimation_SharedHeader.inl" />
-    <CustomBuild Include="VolumetricAnimation_shader.hlsl" />
+    <CustomBuild Include="DenseVolume.hlsl">
+      <Filter>DenseVolume</Filter>
+    </CustomBuild>
+    <CustomBuild Include="DenseVolume_SharedHeader.inl">
+      <Filter>DenseVolume</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="DenseVolume">
+      <UniqueIdentifier>{f529ee05-4813-4543-9af5-dd32b1c7ba6e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
 </Project>

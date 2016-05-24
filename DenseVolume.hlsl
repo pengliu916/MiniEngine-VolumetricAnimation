@@ -1,4 +1,4 @@
-#include "VolumetricAnimation_SharedHeader.inl"
+#include "DenseVolume_SharedHeader.inl"
 
 #if COMPUTE_SHADER
 #if TYPED_UAV
@@ -11,8 +11,9 @@ Buffer<uint4> g_bufVolumeSRV : register(t0);
 RWStructuredBuffer<uint> g_bufVolumeUAV : register(u0);
 #endif // TYPED_UAV
 [numthreads( THREAD_X, THREAD_Y, THREAD_Z )]
-void csmain( uint3 DTid: SV_DispatchThreadID, uint Tid : SV_GroupIndex )
+void cs_volumeupdate_main( uint3 DTid: SV_DispatchThreadID, uint Tid : SV_GroupIndex )
 {
+	// Read in voxel data
 #if TYPED_UAV
 #if TYPED_LOAD_NOT_SUPPORTED
 	uint4 col = g_bufVolumeSRV[DTid.x + DTid.y*voxelResolution.x + DTid.z*voxelResolution.x*voxelResolution.y];
@@ -22,6 +23,9 @@ void csmain( uint3 DTid: SV_DispatchThreadID, uint Tid : SV_GroupIndex )
 #else
 	uint4 col = D3DX_R8G8B8A8_UINT_to_UINT4( g_bufVolumeUAV[DTid.x + DTid.y*voxelResolution.x + DTid.z*voxelResolution.x*voxelResolution.y] );
 #endif // TYPED_UAV
+
+
+	// Updating logic
 	col.xyz -= shiftingColVals[col.w].xyz;
 
 	uint3 delta = col.xyz - bgCol.xyz;
@@ -30,6 +34,9 @@ void csmain( uint3 DTid: SV_DispatchThreadID, uint Tid : SV_GroupIndex )
 		col.w = (col.w + 1) % COLOR_COUNT;
 		col.xyz = (255 - bgCol.w) * shiftingColVals[col.w].xyz + bgCol.xyz;
 	}
+
+
+	// Write back voxel data
 #if TYPED_UAV
 	g_bufVolumeUAV[DTid.x + DTid.y*voxelResolution.x + DTid.z*voxelResolution.x*voxelResolution.y] = col;
 #else
@@ -43,7 +50,7 @@ struct VSOutput {
 	float4 ProjPos : SV_POSITION;
 	float4 Pos : COLOR;
 };
-VSOutput vsmain( float4 pos : POSITION )
+VSOutput vs_boundingcube_main( float4 pos : POSITION )
 {
 	VSOutput vsout = (VSOutput)0;
 	pos.xyz *= voxelResolution;
@@ -60,7 +67,6 @@ Buffer<uint4> g_bufVolumeSRV : register(t0);
 #include "D3DX_DXGIFormatConvert.inl"// this file provide utility funcs for format conversion
 StructuredBuffer<uint> g_bufVolumeSRV : register(t0);
 #endif // TYPED_UAV
-SamplerState samRaycast : register(s0);
 static const float density = 0.02;
 
 struct VSOutput {
@@ -100,12 +106,12 @@ bool IntersectBox( Ray r, float3 boxmin, float3 boxmax, out float tnear, out flo
 //--------------------------------------------------------------------------------------
 // Pixel Shader
 //--------------------------------------------------------------------------------------
-float4 psmain( VSOutput input ) : SV_TARGET
+float4 ps_raycast_main( VSOutput input ) : SV_TARGET
 {
 	float4 output = float4 (0, 0, 0, 0);
 	Ray eyeray;
 	//world space
-	eyeray.o = mul( invWorld, viewPos );
+	eyeray.o = viewPos;
 	eyeray.d = input.Pos - eyeray.o;
 	eyeray.d = normalize( eyeray.d );
 	eyeray.d.x = (eyeray.d.x == 0.f) ? 1e-15 : eyeray.d.x;

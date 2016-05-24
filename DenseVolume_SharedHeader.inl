@@ -30,17 +30,17 @@
 #define REGISTER(x) :register(x)
 #define STRUCT(x) x
 #else 
-typedef XMMATRIX    matrix;
-typedef XMINT4      int4;
-typedef XMINT3		int3;
-typedef XMFLOAT4    float4;
-typedef XMFLOAT3	float3;
+typedef DirectX::XMMATRIX	matrix;
+typedef DirectX::XMINT4		int4;
+typedef DirectX::XMINT3		int3;
+typedef DirectX::XMFLOAT4	float4;
+typedef DirectX::XMFLOAT3	float3;
 #define REGISTER(x)
 #define STRUCT(x) struct
 #endif
 
 #if __cplusplus || (__hlsl && STATIC_ARRAY)
-static int4 shiftingColVals[] =
+static const int4 shiftingColVals[] =
 {
 	int4( 1, 0, 0, 0 ),
 	int4( 0, 1, 0, 1 ),
@@ -52,10 +52,9 @@ static int4 shiftingColVals[] =
 };
 #endif
 
-CBUFFER_ALIGN STRUCT( cbuffer ) ConstantBuffer REGISTER( b0 )
+CBUFFER_ALIGN STRUCT( cbuffer ) DataCB REGISTER( b0 )
 {
 	matrix wvp;
-	matrix invWorld;
 	float4 viewPos;
 	int4 bgCol;
 	int3 voxelResolution;
@@ -64,8 +63,6 @@ CBUFFER_ALIGN STRUCT( cbuffer ) ConstantBuffer REGISTER( b0 )
 	int dummy1;
 	float3 boxMax;
 	int dummy2;
-	float3 reversedWidthHeightDepth;
-	int dummy3;
 
 #if !STATIC_ARRAY
 	int4 shiftingColVals[COLOR_COUNT];
