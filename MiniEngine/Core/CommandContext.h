@@ -219,6 +219,7 @@ public:
 		return CommandContext::Begin( ID ).GetGraphicsContext();
 	}
 
+	void ClearUAV( GpuBuffer& Target );
 	void ClearColor( ColorBuffer& Target );
 	void ClearDepth( DepthBuffer& Target );
 	void ClearStencil( DepthBuffer& Target );
@@ -449,7 +450,7 @@ class ComputeContext : public CommandContext
 public:
 	static ComputeContext& Begin( const std::wstring& ID = L"", bool Async = false );
 
-	//void ClearUAV(GpuBuffer& Target);
+	void ClearUAV(GpuBuffer& Target);
 	//void ClearUAV(ColorBuffer& Target);
 
 	void SetRootSignature( const RootSignature& RootSig );

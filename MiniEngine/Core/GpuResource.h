@@ -149,6 +149,38 @@ protected:
 };
 
 //--------------------------------------------------------------------------------------
+// VolumeTexture
+//--------------------------------------------------------------------------------------
+class VolumeTexture : public GpuResource
+{
+public:
+	VolumeTexture();
+	void Create( const std::wstring& Name, uint32_t Width, uint32_t Height, uint32_t Depth, DXGI_FORMAT Format);
+	uint32_t GetWidth() const { return m_Width; }
+	uint32_t GetHeight() const { return m_Height; }
+	uint32_t GetDepth() const { return m_Depth; }
+	const DXGI_FORMAT& GetFormat() const { return m_Format; }
+
+	const D3D12_CPU_DESCRIPTOR_HANDLE& GetSRV() const { return m_SRVHandle; }
+	const D3D12_CPU_DESCRIPTOR_HANDLE& GetUAV() const { return m_UAVHandle; }
+
+protected:
+	D3D12_RESOURCE_DESC DescribeTex3D( uint32_t Width, uint32_t Height, uint32_t Depth,
+		DXGI_FORMAT Format);
+	void CreateDerivedViews();
+
+	DXGI_FORMAT GetBaseFormat();
+	DXGI_FORMAT GetUAVFormat();
+
+	uint32_t m_Width;
+	uint32_t m_Height;
+	uint32_t m_Depth;
+	DXGI_FORMAT m_Format;
+	D3D12_CPU_DESCRIPTOR_HANDLE m_SRVHandle;
+	D3D12_CPU_DESCRIPTOR_HANDLE m_UAVHandle;
+};
+
+//--------------------------------------------------------------------------------------
 // GpuBuffer
 //--------------------------------------------------------------------------------------
 class GpuBuffer :public GpuResource

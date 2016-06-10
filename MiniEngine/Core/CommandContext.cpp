@@ -404,6 +404,13 @@ void CommandContext::BindDescriptorHeaps()
 //--------------------------------------------------------------------------------------
 // GraphicsContext
 //--------------------------------------------------------------------------------------
+void GraphicsContext::ClearUAV( GpuBuffer& Target )
+{
+	D3D12_GPU_DESCRIPTOR_HANDLE GpuVisibleHandle = m_DynamicDescriptorHeap.UploadDirect( Target.GetUAV() );
+	const UINT ClearColor[4] = {};
+	m_CommandList->ClearUnorderedAccessViewUint( GpuVisibleHandle, Target.GetUAV(), Target.GetResource(), ClearColor, 0, nullptr );
+}
+
 void GraphicsContext::ClearColor( ColorBuffer& Target )
 {
 	TransitionResource( Target, D3D12_RESOURCE_STATE_RENDER_TARGET, true );
@@ -500,4 +507,11 @@ ComputeContext& ComputeContext::Begin( const std::wstring& ID /* = L"" */, bool 
 		Async ? D3D12_COMMAND_LIST_TYPE_COMPUTE : D3D12_COMMAND_LIST_TYPE_DIRECT )->GetComputeContext();
 	NewContext.SetID( ID );
 	return NewContext;
+}
+
+void ComputeContext::ClearUAV( GpuBuffer& Target )
+{
+	D3D12_GPU_DESCRIPTOR_HANDLE GpuVisibleHandle = m_DynamicDescriptorHeap.UploadDirect( Target.GetUAV() );
+	const UINT ClearColor[4] = {};
+	m_CommandList->ClearUnorderedAccessViewUint( GpuVisibleHandle, Target.GetUAV(), Target.GetResource(), ClearColor, 0, nullptr );
 }
