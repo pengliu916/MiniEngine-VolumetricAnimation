@@ -90,13 +90,14 @@ private:
 class thread_guard
 {
 public:
-	thread_guard( std::thread& _t ) :t( _t ) {}
+	thread_guard( std::thread& _t ) :t( std::move( _t ) ) {}
+	thread_guard( std::thread&& _t ) :t( std::move( _t ) ) {}
 	~thread_guard() { if (t.joinable())t.join(); }
 
 	thread_guard( thread_guard const& ) = delete;
 	thread_guard& operator=( thread_guard const& ) = delete;
 private:
-	std::thread& t;
+	std::thread t;
 };
 
 #if defined(DEBUG) || defined(_DEBUG)
