@@ -2,79 +2,83 @@
 #include "DenseVolume_SharedHeader.inl"
 class DenseVolume
 {
+protected:
+    enum BufferType {
+        kStructuredBuffer = 0,
+        kTypedBuffer = 1,
+        kNumBufferType
+    };
+
+    enum VolumeContent {
+        kDimond = 0,
+        kSphere = 1,
+        kNumContentTye
+    };
+
+    enum ResourceState {
+        kNormal = 0,
+        kNewBufferCooking = 1,
+        kNewBufferReady = 2,
+        kRetiringOldBuffer = 3,
+        kOldBufferRetired = 4,
+        kNumStates
+    };
+
 public:
-	enum BufferType
-	{
-		kStructuredBuffer = 0,
-		kTypedBuffer = 1,
-		kNumBufferType
-	};
+    DenseVolume();
+    ~DenseVolume();
 
-	enum VolumeContent
-	{
-		kDimond = 0,
-		kSphere = 1,
-		kNumContentTye
-	};
-
-	enum ResourceState
-	{
-		kNormal = 0,
-		kNewBufferCooking = 1,
-		kNewBufferReady = 2,
-		kRetiringOldBuffer = 3,
-		kOldBufferRetired = 4,
-		kNumStates
-	};
-
-	DenseVolume();
-	~DenseVolume();
-
-	void OnCreateResource();
-	void OnRender( CommandContext& cmdContext, DirectX::XMMATRIX wvp, DirectX::XMFLOAT4 eyePos );
-	void RenderGui();
-
-	void CookVolume( uint32_t Width, uint32_t Height, uint32_t Depth, BufferType BufType, BufferType PreBufType, VolumeContent VolType );
-
-	// Volume settings current in use
-	BufferType					m_BufferTypeInUse = kStructuredBuffer;
-	VolumeContent				m_VolContentInUse = kDimond;
-	uint32_t					m_WidthInUse = 256;
-	uint32_t					m_HeightInUse = 256;
-	uint32_t					m_DepthInUse = 256;
+    void OnCreateResource();
+    void OnRender( CommandContext& cmdContext, DirectX::XMMATRIX wvp, 
+        DirectX::XMFLOAT4 eyePos );
+    void RenderGui();
 
 protected:
-	ComputePSO					m_CptUpdatePSO[kNumBufferType];
-	GraphicsPSO					m_GfxRenderPSO[kNumBufferType];
+    void CookVolume( uint32_t Width, uint32_t Height, uint32_t Depth, 
+        BufferType BufType, BufferType PreBufType, VolumeContent VolType );
 
-	RootSignature				m_RootSignature;
+private:
+    // Volume settings current in use
+    BufferType _currentBufferType = kStructuredBuffer;
+    VolumeContent _currentVolumeContent = kDimond;
+    uint32_t _currentWidth = 256;
+    uint32_t _currentHeight = 256;
+    uint32_t _currentDepth = 256;
+    float _voxelSize = 1.f / 256.f;
 
-	StructuredBuffer			m_StructuredVolBuf[2];
-	TypedBuffer					m_TypedVolBuf[2] = {DXGI_FORMAT_R8G8B8A8_UINT,DXGI_FORMAT_R8G8B8A8_UINT};
+    ComputePSO _computeUpdatePSO[kNumBufferType];
+    GraphicsPSO _graphicRenderPSO[kNumBufferType];
 
-	StructuredBuffer			m_VertexBuffer;
-	ByteAddressBuffer			m_IndexBuffer;
+    RootSignature _rootsignature;
 
-	DataCB						m_CBData[2];
+    StructuredBuffer _structuredVolumeBuffer[2];
+    TypedBuffer _typedVolumeBuffer[2] = 
+        {DXGI_FORMAT_R8G8B8A8_UINT,DXGI_FORMAT_R8G8B8A8_UINT};
 
-	// Since we use other thread updating modified volume, we need 2 copy, and m_OnStageIdx indicate the one in use
-	uint8_t						m_OnStageIdx = 0;
+    StructuredBuffer _vertexBuffer;
+    ByteAddressBuffer _indexBuffer;
 
-	std::atomic<ResourceState>	m_State = kNormal;
+    DataCB _constantBufferData[2];
 
-	// Thread variable for handling thread
-	std::thread					m_BgThread;
+    // Since we use other thread updating modified volume, we need 2 copy, 
+    // and m_OnStageIdx indicate the one in use
+    uint8_t _onStageIndex = 0;
 
-	// FenceValue for destroy old buffer
-	uint64_t					m_FenceValue;
+    std::atomic<ResourceState> _resourceState = kNormal;
 
-	// Volume settings will be used for new volume
-	BufferType					m_NewBufferType = m_BufferTypeInUse;
-	VolumeContent				m_NewVolContent = m_VolContentInUse;
+    // Thread variable for handling thread
+    std::unique_ptr<thread_guard> _backgroundThread;
 
-	uint32_t					m_NewWidth = m_WidthInUse;
-	uint32_t					m_NewHeight = m_HeightInUse;
-	uint32_t					m_NewDepth = m_DepthInUse;
+    // FenceValue for destroy old buffer
+    uint64_t _fenceValue;
 
-	bool						m_TypeLoadSupported = false;
+    // Volume settings will be used for new volume
+    BufferType _newBufferType = _currentBufferType;
+    VolumeContent _newVolumeContent = _currentVolumeContent;
+
+    uint32_t _newWidth = _currentWidth;
+    uint32_t _newHeight = _currentHeight;
+    uint32_t _newDepth = _currentDepth;
+
+    bool _typedLoadSupported = false;
 };

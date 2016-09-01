@@ -7,6 +7,7 @@
 #include "GPU_Profiler.h"
 #include "CmdListMngr.h"
 #include "CommandContext.h"
+#include "SamplerMngr.h"
 #include "PipelineState.h"
 #include "Graphics.h"
 #include "LinearAllocator.h"

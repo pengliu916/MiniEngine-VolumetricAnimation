@@ -7,12 +7,18 @@
     <ClCompile Include="DenseVolume.cpp">
       <Filter>DenseVolume</Filter>
     </ClCompile>
+    <ClCompile Include="SparseVolume.cpp">
+      <Filter>SparseVolume</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="VolumetricAnimation.h" />
     <ClInclude Include="DenseVolume.h">
       <Filter>DenseVolume</Filter>
+    </ClInclude>
+    <ClInclude Include="SparseVolume.h">
+      <Filter>SparseVolume</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -23,10 +29,19 @@
     <CustomBuild Include="DenseVolume_SharedHeader.inl">
       <Filter>DenseVolume</Filter>
     </CustomBuild>
+    <CustomBuild Include="SparseVolume.hlsl">
+      <Filter>SparseVolume</Filter>
+    </CustomBuild>
+    <CustomBuild Include="SparseVolume_SharedHeader.inl">
+      <Filter>SparseVolume</Filter>
+    </CustomBuild>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="DenseVolume">
       <UniqueIdentifier>{f529ee05-4813-4543-9af5-dd32b1c7ba6e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="SparseVolume">
+      <UniqueIdentifier>{33f3ad9f-811e-4403-84f3-18cac2e8f3ab}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>
