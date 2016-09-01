@@ -93,7 +93,12 @@ protected:
 class ColorBuffer : public PixelBuffer
 {
 public:
-	ColorBuffer( DirectX::XMVECTOR ClearColor = DirectX::XMVectorSet( 0.0f, 0.0f, 0.0f, 0.0f ) );
+	ColorBuffer( DirectX::XMVECTOR ClearColor = DirectX::XMVectorSet( 0.0f, 0.0f, 0.0f, 0.0f ) )
+		: m_ClearColor(ClearColor), m_NumMipMaps(0) {
+		m_SRVHandle.ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
+		m_RTVHandle.ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
+		std::memset(m_UAVHandle, 0xFF, sizeof(m_UAVHandle));
+	}
 	void CreateFromSwapChain( const std::wstring& Name, ID3D12Resource* BaseResource );
 	void Create( const std::wstring& Name, uint32_t Width, uint32_t Height, uint32_t NumMips,
 		DXGI_FORMAT Format, D3D12_GPU_VIRTUAL_ADDRESS VidMemPtr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN );
@@ -127,9 +132,19 @@ protected:
 class DepthBuffer : public PixelBuffer
 {
 public:
-	DepthBuffer( FLOAT ClearDepth = .0f, UINT8 ClearStencil = 0 );
+	DepthBuffer::DepthBuffer(FLOAT ClearDepth = .0f, UINT8 ClearStencil = 0 )
+		:m_ClearDepth(ClearDepth), m_ClearStencil(ClearStencil) {
+		m_DSVHandle[0].ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
+		m_DSVHandle[1].ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
+		m_DSVHandle[2].ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
+		m_DSVHandle[3].ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
+		m_DepthSRVHandle.ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
+		m_StencilSRVHandle.ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
+	}
 	void Create( const std::wstring& Name, uint32_t Width, uint32_t Height, DXGI_FORMAT format,
-		D3D12_GPU_VIRTUAL_ADDRESS VidMemPtr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN );
+		D3D12_GPU_VIRTUAL_ADDRESS VidMemPtr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN);
+	void Create(const std::wstring& Name, uint32_t Width, uint32_t Height, uint32_t NumSamples,
+		DXGI_FORMAT format, D3D12_GPU_VIRTUAL_ADDRESS VidMemPtr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN);
 	const D3D12_CPU_DESCRIPTOR_HANDLE& GetDSV() const { return m_DSVHandle[0]; }
 	const D3D12_CPU_DESCRIPTOR_HANDLE& GetDSV_DepthReadOnly() const { return m_DSVHandle[1]; }
 	const D3D12_CPU_DESCRIPTOR_HANDLE& GetDSV_StencilReadOnly() const { return m_DSVHandle[2]; }

@@ -82,7 +82,7 @@ namespace
 			};
 			context.SetDynamicConstantBufferView( 0, sizeof( mvp ), mvp );
 			context.SetPrimitiveTopology( D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST );
-			context.SetRenderTargets( 1, &Graphics::g_pDisplayPlanes[Graphics::g_CurrentDPIdx] );
+			context.SetRenderTargets( 1, &Graphics::g_pDisplayPlanes[Graphics::g_CurrentDPIdx].GetRTV() );
 			context.SetViewport( Graphics::g_DisplayPlaneViewPort );
 			context.SetScisor( Graphics::g_DisplayPlaneScissorRect );
 			// Setup viewport
@@ -191,7 +191,7 @@ HRESULT GuiRenderer::CreateResource()
 	_rootSignature.InitStaticSampler( 0, Graphics::g_SamplerLinearWrapDesc, D3D12_SHADER_VISIBILITY_PIXEL );
 	_rootSignature[0].InitAsConstantBuffer( 0 );
 	_rootSignature[1].InitAsDescriptorRange( D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1, D3D12_SHADER_VISIBILITY_PIXEL );
-	_rootSignature.Finalize( D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
+	_rootSignature.Finalize(L"GuiRenderer", D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
 		D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
 		D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
 		D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS );

@@ -44,7 +44,7 @@ void FXAA::CreateResource()
 	RootSig[0].InitAsConstants( 0, 4 );
 	RootSig[1].InitAsDescriptorRange( D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 5 );
 	RootSig[2].InitAsDescriptorRange( D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 6 );
-	RootSig.Finalize();
+	RootSig.Finalize(L"FXAA");
 
 	HRESULT hr;
 	ComPtr<ID3DBlob> Pass1ComputeShader;
@@ -202,6 +202,8 @@ void FXAA::Render( ComputeContext& Context )
 
 	Context.SetPipelineState( DebugDraw ? Pass2VDebugCS : Pass2VCS );
 	Context.DispatchIndirect( IndirectParameters, 12 );
+
+	Context.InsertUAVBarrier( Graphics::g_SceneColorBuffer );
 }
 
 void FXAA::UpdateGUI()

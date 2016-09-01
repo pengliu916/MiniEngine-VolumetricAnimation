@@ -94,7 +94,7 @@ void RootSignature::InitStaticSampler( UINT Register, const D3D12_SAMPLER_DESC& 
 	}
 }
 
-void RootSignature::Finalize( D3D12_ROOT_SIGNATURE_FLAGS Flags /* = D3D12_ROOT_SIGNATURE_FLAG_NONE */ )
+void RootSignature::Finalize( const std::wstring& name, D3D12_ROOT_SIGNATURE_FLAGS Flags /* = D3D12_ROOT_SIGNATURE_FLAG_NONE */ )
 {
 	if (m_Finalized)
 		return;
@@ -111,7 +111,8 @@ void RootSignature::Finalize( D3D12_ROOT_SIGNATURE_FLAGS Flags /* = D3D12_ROOT_S
 	m_DescriptorTableBitMap = 0;
 	m_MaxDescriptorCacheHandleCount = 0;
 
-	size_t HashCode = HashStateArray( RootDesc.pStaticSamplers, m_NumSamplers );
+	size_t HashCode = HashState( &RootDesc.Flags );
+	HashCode = HashStateArray( RootDesc.pStaticSamplers, m_NumSamplers, HashCode);
 
 	for (UINT Param = 0; Param < m_NumParameters; ++Param)
 	{
@@ -158,6 +159,9 @@ void RootSignature::Finalize( D3D12_ROOT_SIGNATURE_FLAGS Flags /* = D3D12_ROOT_S
 			pOutBlob.GetAddressOf(), pErrorBlob.GetAddressOf() ) );
 		V( Graphics::g_device->CreateRootSignature( 1, pOutBlob->GetBufferPointer(),
 			pOutBlob->GetBufferSize(), IID_PPV_ARGS( &m_Signature ) ) );
+		m_Signature->SetName( name.c_str() );
+		s_RootSignatureHashMap[HashCode].Attach( m_Signature );
+		ASSERT( *RSRef == m_Signature );
 	}
 	else
 	{
