@@ -110,7 +110,7 @@ void DenseVolume::OnCreateResource()
         D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
     _rootsignature[2].InitAsDescriptorRange(
         D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
-    _rootsignature.Finalize(
+    _rootsignature.Finalize(L"DenseVolume",
         D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
         D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
         D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
@@ -209,6 +209,11 @@ void DenseVolume::OnCreateResource()
 void DenseVolume::OnRender(CommandContext& cmdContext,
     DirectX::XMMATRIX wvp, DirectX::XMFLOAT4 eyePos)
 {
+    cmdContext.BeginResourceTransition(Graphics::g_SceneColorBuffer,
+        D3D12_RESOURCE_STATE_RENDER_TARGET);
+    cmdContext.BeginResourceTransition(Graphics::g_SceneDepthBuffer,
+        D3D12_RESOURCE_STATE_DEPTH_WRITE);
+
     switch (_resourceState.load(memory_order_acquire)) {
         case kNewBufferReady:
             _currentBufferType = _newBufferType;
@@ -243,7 +248,16 @@ void DenseVolume::OnRender(CommandContext& cmdContext,
         cptContext.Dispatch(_currentWidth / THREAD_X,
             _currentHeight / THREAD_Y, _currentDepth / THREAD_Z);
     }
+
+    cmdContext.BeginResourceTransition(*VolumeBuffer,
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     GraphicsContext& gfxContext = cmdContext.GetGraphicsContext();
+    gfxContext.TransitionResource(Graphics::g_SceneColorBuffer,
+        D3D12_RESOURCE_STATE_RENDER_TARGET);
+    gfxContext.TransitionResource(Graphics::g_SceneDepthBuffer,
+        D3D12_RESOURCE_STATE_DEPTH_WRITE, true);
+    gfxContext.ClearColor(Graphics::g_SceneColorBuffer);
+    gfxContext.ClearDepth(Graphics::g_SceneDepthBuffer);
     {
         GPU_PROFILE(gfxContext, L"Rendering");
         gfxContext.SetRootSignature(_rootsignature);
@@ -255,14 +269,16 @@ void DenseVolume::OnRender(CommandContext& cmdContext,
             sizeof(DataCB), (void*)&_constantBufferData[_onStageIndex]);
         gfxContext.SetDynamicDescriptors(1, 0, 1, &VolumeBuffer->GetSRV());
         gfxContext.SetDynamicDescriptors(2, 0, 1, &VolumeBuffer->GetUAV());
-        gfxContext.SetRenderTargets(1,
-            &Graphics::g_SceneColorBuffer, &Graphics::g_SceneDepthBuffer);
+        gfxContext.SetRenderTargets(1, &Graphics::g_SceneColorBuffer.GetRTV(),
+            Graphics::g_SceneDepthBuffer.GetDSV());
         gfxContext.SetViewport(Graphics::g_DisplayPlaneViewPort);
         gfxContext.SetScisor(Graphics::g_DisplayPlaneScissorRect);
         gfxContext.SetVertexBuffer(0, _vertexBuffer.VertexBufferView());
         gfxContext.SetIndexBuffer(_indexBuffer.IndexBufferView());
         gfxContext.DrawIndexed(36);
     }
+    cmdContext.BeginResourceTransition(*VolumeBuffer,
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 }
 
 void DenseVolume::RenderGui()

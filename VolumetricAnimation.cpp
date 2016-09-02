@@ -77,9 +77,6 @@ void VolumetricAnimation::OnRender(CommandContext& EngineContext)
 {
     XMMATRIX view = m_camera.View();
     XMMATRIX proj = m_camera.Projection();
-    GraphicsContext& gfxContext = EngineContext.GetGraphicsContext();
-    gfxContext.ClearColor(Graphics::g_SceneColorBuffer);
-    gfxContext.ClearDepth(Graphics::g_SceneDepthBuffer);
 
     XMFLOAT4 eyePos;
     XMStoreFloat4(&eyePos, m_camera.Eye());

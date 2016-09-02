@@ -135,7 +135,7 @@ SparseVolume::OnCreateResource()
         D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 1);
     _rootsignature[3].InitAsDescriptorRange(
         D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
-    _rootsignature.Finalize(
+    _rootsignature.Finalize(L"SparseVolume",
         D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
         D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
         D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
@@ -235,6 +235,10 @@ void
 SparseVolume::OnRender(CommandContext& cmdContext, DirectX::XMMATRIX wvp,
     DirectX::XMMATRIX mView, DirectX::XMFLOAT4 eyePos)
 {
+    cmdContext.BeginResourceTransition(Graphics::g_SceneColorBuffer,
+        D3D12_RESOURCE_STATE_RENDER_TARGET);
+    cmdContext.BeginResourceTransition(Graphics::g_SceneDepthBuffer,
+        D3D12_RESOURCE_STATE_DEPTH_WRITE);
     switch (_resourceState.load(memory_order_acquire)) {
         case kNewBufferReady:
             _currentBufferType = _newBufferType;
@@ -296,7 +300,31 @@ SparseVolume::OnRender(CommandContext& cmdContext, DirectX::XMMATRIX wvp,
     ctx.TransitionResource(volResource,state); \
     ctx.SetDynamicDescriptors(3,0,1,&volResource.GetSRV());
 
+    switch (_currentBufferType) {
+        case kStructuredBuffer:
+            cmdContext.BeginResourceTransition(
+                _structVolumeBuffer[_onStageIndex],
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            break;
+        case kTypedBuffer:
+            cmdContext.BeginResourceTransition(
+                _typedVolumeBuffer[_onStageIndex],
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            break;
+        case k3DTexBuffer:
+            cmdContext.BeginResourceTransition(
+                _volumeTextureBuffer[_onStageIndex],
+                D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            break;
+    }
+
     GraphicsContext& gfxContext = cmdContext.GetGraphicsContext();
+    gfxContext.TransitionResource(Graphics::g_SceneColorBuffer,
+        D3D12_RESOURCE_STATE_RENDER_TARGET);
+    gfxContext.TransitionResource(Graphics::g_SceneDepthBuffer,
+        D3D12_RESOURCE_STATE_DEPTH_WRITE, true);
+    gfxContext.ClearColor(Graphics::g_SceneColorBuffer);
+    gfxContext.ClearDepth(Graphics::g_SceneDepthBuffer);
     {
         GPU_PROFILE(gfxContext, L"Rendering");
         gfxContext.SetRootSignature(_rootsignature);
@@ -326,8 +354,8 @@ SparseVolume::OnRender(CommandContext& cmdContext, DirectX::XMMATRIX wvp,
                     D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
                 break;
         }
-        gfxContext.SetRenderTargets(1, &Graphics::g_SceneColorBuffer,
-            &Graphics::g_SceneDepthBuffer);
+        gfxContext.SetRenderTargets(1, &Graphics::g_SceneColorBuffer.GetRTV(),
+            Graphics::g_SceneDepthBuffer.GetDSV());
         gfxContext.SetViewport(Graphics::g_DisplayPlaneViewPort);
         gfxContext.SetScisor(Graphics::g_DisplayPlaneScissorRect);
         gfxContext.SetVertexBuffer(0, _vertexBuffer.VertexBufferView());
@@ -335,6 +363,23 @@ SparseVolume::OnRender(CommandContext& cmdContext, DirectX::XMMATRIX wvp,
         gfxContext.DrawIndexed(36);
     }
 #undef BindVolumeResource
+    switch (_currentBufferType) {
+        case kStructuredBuffer:
+            cmdContext.BeginResourceTransition(
+                _structVolumeBuffer[_onStageIndex],
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            break;
+        case kTypedBuffer:
+            cmdContext.BeginResourceTransition(
+                _typedVolumeBuffer[_onStageIndex],
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            break;
+        case k3DTexBuffer:
+            cmdContext.BeginResourceTransition(
+                _volumeTextureBuffer[_onStageIndex],
+                D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+            break;
+    }
 }
 
 void
