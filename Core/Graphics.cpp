@@ -81,6 +81,8 @@ namespace Graphics
 	SamplerDescriptor			g_SamplerLinearClamp;
 	SamplerDesc					g_SamplerLinearWrapDesc;
 	SamplerDescriptor			g_SamplerLinearWrap;
+	SamplerDesc					g_SamplerAnisoWrapDesc;
+	SamplerDescriptor			g_SamplerAnisoWrap;
 
 	D3D12_RASTERIZER_DESC		g_RasterizerDefault;
 	D3D12_RASTERIZER_DESC		g_RasterizerDefaultCW;
@@ -242,7 +244,22 @@ namespace Graphics
 			};
 
 			// Suppress individual messages by their ID
-			D3D12_MESSAGE_ID DenyIds[] = {D3D12_MESSAGE_ID_EXECUTECOMMANDLISTS_GPU_WRITTEN_READBACK_RESOURCE_MAPPED};
+			D3D12_MESSAGE_ID DenyIds[] = {
+				D3D12_MESSAGE_ID_EXECUTECOMMANDLISTS_GPU_WRITTEN_READBACK_RESOURCE_MAPPED,
+				// This occurs when there are uninitialized descriptors in a descriptor table, even when a
+				// shader does not access the missing descriptors.  I find this is common when switching
+				// shader permutations and not wanting to change much code to reorder resources.
+				D3D12_MESSAGE_ID_INVALID_DESCRIPTOR_HANDLE,
+
+				// Triggered when a shader does not export all color components of a render target, such as
+				// when only writing RGB to an R10G10B10A2 buffer, ignoring alpha.
+				D3D12_MESSAGE_ID_CREATEGRAPHICSPIPELINESTATE_PS_OUTPUT_RT_OUTPUT_MISMATCH,
+
+				// This occurs when a descriptor table is unbound even when a shader does not access the missing
+				// descriptors.  This is common with a root signature shared between disparate shaders that
+				// don't all need the same types of resources.
+				D3D12_MESSAGE_ID_COMMAND_LIST_DESCRIPTOR_TABLE_NOT_SET
+			};
 
 			D3D12_INFO_QUEUE_FILTER NewFilter = {};
 			//NewFilter.DenyList.NumCategories = _countof(Categories);
@@ -257,10 +274,6 @@ namespace Graphics
 		}
 #endif
 
-#ifndef RELEASE
-		// Prevent the GPU from overclocking or underclocking to get consistent timings
-		g_device->SetStablePowerState( TRUE );
-#endif
 		g_cmdListMngr.Create( g_device.Get() );
 
 		g_pRTVDescriptorHeap = new DescriptorHeap( g_device.Get(), Core::NUM_RTV, D3D12_DESCRIPTOR_HEAP_TYPE_RTV );
@@ -311,6 +324,8 @@ namespace Graphics
 		g_SamplerLinearWrapDesc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
 		g_SamplerLinearWrapDesc.SetTextureAddressMode( D3D12_TEXTURE_ADDRESS_MODE_WRAP );
 		g_SamplerLinearWrap.Create( g_SamplerLinearWrapDesc );
+		g_SamplerAnisoWrapDesc.MaxAnisotropy = 8;
+		g_SamplerAnisoWrap.Create( g_SamplerAnisoWrapDesc );
 
 		// Rasterizer states
 		g_RasterizerDefault.FillMode = D3D12_FILL_MODE_SOLID;
@@ -394,7 +409,7 @@ namespace Graphics
 
 		s_PresentRS.Reset( 1 );
 		s_PresentRS[0].InitAsDescriptorRange( D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1 );
-		s_PresentRS.Finalize();
+		s_PresentRS.Finalize(L"Present");
 
 		ComPtr<ID3DBlob> QuadVS;
 		ComPtr<ID3DBlob> CopyPS;
@@ -472,7 +487,7 @@ namespace Graphics
 		g_SceneColorBuffer.Destroy();
 		g_SceneDepthBuffer.Destroy();
 
-		g_SceneColorBuffer.Create( L"Main Color Buffer", Width, Height, 1, DXGI_FORMAT_R11G11B10_FLOAT );
+		g_SceneColorBuffer.Create( L"Main Color Buffer", Width, Height, 1, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB );
 		g_SceneDepthBuffer.Create( L"Scene Depth Buffer", Width, Height, DXGI_FORMAT_D32_FLOAT );
 
 		for (uint8_t i = 0; i < Core::g_config.swapChainDesc.BufferCount; i++)
@@ -503,11 +518,12 @@ namespace Graphics
 		{
 			GPU_PROFILE( Context, L"Copy To BackBuffer" );
 			Context.TransitionResource( g_SceneColorBuffer, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE );
+			Context.TransitionResource(g_pDisplayPlanes[g_CurrentDPIdx], D3D12_RESOURCE_STATE_RENDER_TARGET);
 			Context.SetRootSignature( s_PresentRS );
 			Context.SetPipelineState( s_BufferCopyPSO );
 			Context.SetPrimitiveTopology( D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST );
 			Context.SetDynamicDescriptors( 0, 0, 1, &g_SceneColorBuffer.GetSRV() );
-			Context.SetRenderTargets( 1, &g_pDisplayPlanes[g_CurrentDPIdx] );
+			Context.SetRenderTargets( 1, &g_pDisplayPlanes[g_CurrentDPIdx].GetRTV() );
 			Context.SetViewport( g_DisplayPlaneViewPort );
 			Context.SetScisor( g_DisplayPlaneScissorRect );
 			Context.Draw( 3 );

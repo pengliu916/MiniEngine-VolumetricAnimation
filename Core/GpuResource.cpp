@@ -59,13 +59,7 @@ void PixelBuffer::CreateTextureResource( ID3D12Device* Device, const std::wstrin
 	const D3D12_RESOURCE_DESC& ResourceDesc, D3D12_CLEAR_VALUE ClearValue,
 	D3D12_GPU_VIRTUAL_ADDRESS VidMemPtr /* = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN */ )
 {
-	D3D12_HEAP_PROPERTIES HeapProps;
-	HeapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-	HeapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-	HeapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-	HeapProps.CreationNodeMask = 1;
-	HeapProps.VisibleNodeMask = 1;
-
+	CD3DX12_HEAP_PROPERTIES HeapProps(D3D12_HEAP_TYPE_DEFAULT);
 	HRESULT hr;
 	V( Device->CreateCommittedResource( &HeapProps, D3D12_HEAP_FLAG_NONE, &ResourceDesc,
 		D3D12_RESOURCE_STATE_COMMON, &ClearValue, IID_PPV_ARGS( &m_pResource ) ) );
@@ -265,18 +259,10 @@ DXGI_FORMAT PixelBuffer::GetStencilFormat( DXGI_FORMAT defaultFormat )
 //--------------------------------------------------------------------------------------
 // ColorBuffer
 //--------------------------------------------------------------------------------------
-ColorBuffer::ColorBuffer( DirectX::XMVECTOR ClearColor )
-	: m_ClearColor( ClearColor ), m_NumMipMaps( 0 )
-{
-	m_SRVHandle.ptr = ~0ull;
-	m_RTVHandle.ptr = ~0ull;
-	std::memset( m_UAVHandle, 0xFF, sizeof( m_UAVHandle ) );
-}
-
 void ColorBuffer::CreateFromSwapChain( const std::wstring& Name, ID3D12Resource* BaseResource )
 {
 	AssociateWithResource( Graphics::g_device.Get(), Name, BaseResource, D3D12_RESOURCE_STATE_PRESENT );
-	if (m_RTVHandle.ptr == ~0ull)
+	if (m_RTVHandle.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 		m_RTVHandle = Graphics::g_pRTVDescriptorHeap->Append().GetCPUHandle();
 	Graphics::g_device->CreateRenderTargetView( m_pResource.Get(), nullptr, m_RTVHandle );
 }
@@ -302,7 +288,7 @@ void ColorBuffer::Create( const std::wstring& Name, uint32_t Width, uint32_t Hei
 void ColorBuffer::GuiShow()
 {
 	USES_CONVERSION;
-	if (ImGui::Begin( W2A(m_Name.c_str()), &m_GuiOpen))
+	if (ImGui::Begin( W2A( m_Name.c_str() ), &m_GuiOpen ))
 	{
 		ImTextureID tex_id = (void*)&this->GetSRV();
 		uint32_t OrigTexWidth = this->GetWidth();
@@ -370,7 +356,7 @@ void ColorBuffer::CreateDerivedViews( ID3D12Device* Device, DXGI_FORMAT Format, 
 		SRVDesc.Texture2D.MostDetailedMip = 0;
 	}
 
-	if (m_SRVHandle.ptr == ~0ull)
+	if (m_SRVHandle.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 	{
 		m_RTVHandle = Graphics::g_pRTVDescriptorHeap->Append().GetCPUHandle();
 		m_SRVHandle = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
@@ -381,7 +367,7 @@ void ColorBuffer::CreateDerivedViews( ID3D12Device* Device, DXGI_FORMAT Format, 
 	Device->CreateShaderResourceView( Resource, &SRVDesc, m_SRVHandle );
 	for (uint32_t i = 0; i < NumMips; ++i)
 	{
-		if (m_UAVHandle[i].ptr == ~0ull)
+		if (m_UAVHandle[i].ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 			m_UAVHandle[i] = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
 		Device->CreateUnorderedAccessView( Resource, nullptr, &UAVDesc, m_UAVHandle[i] );
 		UAVDesc.Texture2D.MipSlice++;
@@ -391,17 +377,6 @@ void ColorBuffer::CreateDerivedViews( ID3D12Device* Device, DXGI_FORMAT Format, 
 //--------------------------------------------------------------------------------------
 // DepthBuffer
 //--------------------------------------------------------------------------------------
-DepthBuffer::DepthBuffer( FLOAT ClearDepth /* = .0f */, UINT8 ClearStencil /* = 0 */ )
-	:m_ClearDepth( ClearDepth ), m_ClearStencil( ClearStencil )
-{
-	m_DSVHandle[0].ptr = ~0ull;
-	m_DSVHandle[1].ptr = ~0ull;
-	m_DSVHandle[2].ptr = ~0ull;
-	m_DSVHandle[3].ptr = ~0ull;
-	m_DepthSRVHandle.ptr = ~0ull;
-	m_StencilSRVHandle.ptr = ~0ull;
-}
-
 void DepthBuffer::Create( const std::wstring& Name, uint32_t Width, uint32_t Height, DXGI_FORMAT Format,
 	D3D12_GPU_VIRTUAL_ADDRESS VidMemPtr /* = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN */ )
 {
@@ -414,14 +389,34 @@ void DepthBuffer::Create( const std::wstring& Name, uint32_t Width, uint32_t Hei
 	CreateDerivedViews( Graphics::g_device.Get(), Format );
 }
 
+void DepthBuffer::Create(const std::wstring& Name, uint32_t Width, uint32_t Height, uint32_t Samples, DXGI_FORMAT Format, D3D12_GPU_VIRTUAL_ADDRESS VidMemPtr)
+{
+	D3D12_RESOURCE_DESC ResourceDesc = DescribeTex2D(Width, Height, 1, 1, Format, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+	ResourceDesc.SampleDesc.Count = Samples;
+
+	D3D12_CLEAR_VALUE ClearValue = {};
+	ClearValue.Format = Format;
+	ClearValue.DepthStencil.Depth = m_ClearDepth;
+	ClearValue.DepthStencil.Stencil = m_ClearStencil;
+	CreateTextureResource(Graphics::g_device.Get(), Name, ResourceDesc, ClearValue, VidMemPtr);
+	CreateDerivedViews(Graphics::g_device.Get(), Format);
+}
+
 void DepthBuffer::CreateDerivedViews( ID3D12Device* Device, DXGI_FORMAT Format )
 {
 	ID3D12Resource* Resource = m_pResource.Get();
 	D3D12_DEPTH_STENCIL_VIEW_DESC DSVDesc;
 	DSVDesc.Format = GetDSVFormat( Format );
-	DSVDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-	DSVDesc.Texture2D.MipSlice = 0;
-	if (m_DSVHandle[0].ptr == ~0ull)
+	if (Resource->GetDesc().SampleDesc.Count ==1) 
+	{
+		DSVDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+		DSVDesc.Texture2D.MipSlice = 0;
+	}
+	else
+	{
+		DSVDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DMS;
+	}
+	if (m_DSVHandle[0].ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 	{
 		m_DSVHandle[0] = Graphics::g_pDSVDescriptorHeap->Append().GetCPUHandle();
 		m_DSVHandle[1] = Graphics::g_pDSVDescriptorHeap->Append().GetCPUHandle();
@@ -434,7 +429,7 @@ void DepthBuffer::CreateDerivedViews( ID3D12Device* Device, DXGI_FORMAT Format )
 	DXGI_FORMAT stencilReadFormat = GetStencilFormat( Format );
 	if (stencilReadFormat != DXGI_FORMAT_UNKNOWN)
 	{
-		if (m_DSVHandle[2].ptr == ~0ull)
+		if (m_DSVHandle[2].ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 		{
 			m_DSVHandle[2] = Graphics::g_pDSVDescriptorHeap->Append().GetCPUHandle();
 			m_DSVHandle[3] = Graphics::g_pDSVDescriptorHeap->Append().GetCPUHandle();
@@ -450,18 +445,25 @@ void DepthBuffer::CreateDerivedViews( ID3D12Device* Device, DXGI_FORMAT Format )
 		m_DSVHandle[3] = m_DSVHandle[1];
 	}
 
-	if (m_DepthSRVHandle.ptr == ~0ull)
+	if (m_DepthSRVHandle.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 		m_DepthSRVHandle = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
 	D3D12_SHADER_RESOURCE_VIEW_DESC SRVDesc = {};
 	SRVDesc.Format = GetDepthFormat( Format );
-	SRVDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	if (DSVDesc.ViewDimension == D3D12_DSV_DIMENSION_TEXTURE2D)
+	{
+		SRVDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		SRVDesc.Texture2D.MipLevels = 1;
+	}
+	else
+	{
+		SRVDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2DMS;
+	}
 	SRVDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	SRVDesc.Texture2D.MipLevels = 1;
 	Device->CreateShaderResourceView( Resource, &SRVDesc, m_DepthSRVHandle );
 
 	if (stencilReadFormat != DXGI_FORMAT_UNKNOWN)
 	{
-		if (m_StencilSRVHandle.ptr == ~0ull)
+		if (m_StencilSRVHandle.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 		{
 			m_StencilSRVHandle = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
 		}
@@ -470,6 +472,155 @@ void DepthBuffer::CreateDerivedViews( ID3D12Device* Device, DXGI_FORMAT Format )
 	}
 }
 
+//--------------------------------------------------------------------------------------
+// VolumeTexture
+//--------------------------------------------------------------------------------------
+VolumeTexture::VolumeTexture()
+	: m_Width( 0 ), m_Height( 0 ), m_Depth( 0 )
+{
+	m_SRVHandle.ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
+	m_UAVHandle.ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
+}
+
+void VolumeTexture::Create( const std::wstring& Name, uint32_t Width, uint32_t Height, uint32_t Depth, DXGI_FORMAT Format )
+{
+	D3D12_RESOURCE_DESC Desc = DescribeTex3D( Width, Height, Depth, Format );
+
+	D3D12_HEAP_PROPERTIES HeapProps;
+	HeapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+	HeapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	HeapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+	HeapProps.CreationNodeMask = 1;
+	HeapProps.VisibleNodeMask = 1;
+
+	HRESULT hr;
+	V( Graphics::g_device->CreateCommittedResource( &HeapProps, D3D12_HEAP_FLAG_NONE, &Desc,
+		D3D12_RESOURCE_STATE_COMMON, NULL, IID_PPV_ARGS( &m_pResource ) ) );
+	CreateDerivedViews();
+}
+
+D3D12_RESOURCE_DESC VolumeTexture::DescribeTex3D( uint32_t Width, uint32_t Height, uint32_t Depth, DXGI_FORMAT Format )
+{
+	m_Width = Width;
+	m_Height = Height;
+	m_Depth = Depth;
+	m_Format = Format;
+
+	D3D12_RESOURCE_DESC Desc = {};
+	Desc.Alignment = 0;
+	Desc.DepthOrArraySize = (UINT16)Depth;
+	Desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+	Desc.Flags = (D3D12_RESOURCE_FLAGS)(D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+	Desc.Format = GetBaseFormat();
+	Desc.Height = (UINT)Height;
+	Desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	Desc.MipLevels = 1;
+	Desc.SampleDesc.Count = 1;
+	Desc.SampleDesc.Quality = 0;
+	Desc.Width = (UINT64)Width;
+	return Desc;
+}
+
+void VolumeTexture::CreateDerivedViews()
+{
+	ID3D12Resource* Resource = m_pResource.Get();
+	if (m_SRVHandle.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
+		m_SRVHandle = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
+	Graphics::g_device->CreateShaderResourceView( Resource, nullptr, m_SRVHandle );
+	if (m_UAVHandle.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
+		m_UAVHandle = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
+	Graphics::g_device->CreateUnorderedAccessView( Resource, nullptr, nullptr, m_UAVHandle );
+}
+
+DXGI_FORMAT VolumeTexture::GetBaseFormat()
+{
+	switch (m_Format)
+	{
+	case DXGI_FORMAT_R8G8B8A8_UNORM:
+	case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+		return DXGI_FORMAT_R8G8B8A8_TYPELESS;
+
+	case DXGI_FORMAT_B8G8R8A8_UNORM:
+	case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+		return DXGI_FORMAT_B8G8R8A8_TYPELESS;
+
+	case DXGI_FORMAT_B8G8R8X8_UNORM:
+	case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
+		return DXGI_FORMAT_B8G8R8X8_TYPELESS;
+
+		// 32-bit Z w/ Stencil
+	case DXGI_FORMAT_R32G8X24_TYPELESS:
+	case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+	case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS:
+	case DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:
+		return DXGI_FORMAT_R32G8X24_TYPELESS;
+
+		// No Stencil
+	case DXGI_FORMAT_R32_TYPELESS:
+	case DXGI_FORMAT_D32_FLOAT:
+	case DXGI_FORMAT_R32_FLOAT:
+		return DXGI_FORMAT_R32_TYPELESS;
+
+		// 24-bit Z
+	case DXGI_FORMAT_R24G8_TYPELESS:
+	case DXGI_FORMAT_D24_UNORM_S8_UINT:
+	case DXGI_FORMAT_R24_UNORM_X8_TYPELESS:
+	case DXGI_FORMAT_X24_TYPELESS_G8_UINT:
+		return DXGI_FORMAT_R24G8_TYPELESS;
+
+		// 16-bit Z w/o Stencil
+	case DXGI_FORMAT_R16_TYPELESS:
+	case DXGI_FORMAT_D16_UNORM:
+	case DXGI_FORMAT_R16_UNORM:
+		return DXGI_FORMAT_R16_TYPELESS;
+
+	default:
+		return m_Format;
+	}
+}
+
+DXGI_FORMAT VolumeTexture::GetUAVFormat()
+{
+	switch (m_Format)
+	{
+	case DXGI_FORMAT_R8G8B8A8_TYPELESS:
+	case DXGI_FORMAT_R8G8B8A8_UNORM:
+	case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+		return DXGI_FORMAT_R8G8B8A8_UNORM;
+
+	case DXGI_FORMAT_B8G8R8A8_TYPELESS:
+	case DXGI_FORMAT_B8G8R8A8_UNORM:
+	case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+		return DXGI_FORMAT_B8G8R8A8_UNORM;
+
+	case DXGI_FORMAT_B8G8R8X8_TYPELESS:
+	case DXGI_FORMAT_B8G8R8X8_UNORM:
+	case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
+		return DXGI_FORMAT_B8G8R8X8_UNORM;
+
+	case DXGI_FORMAT_R32_TYPELESS:
+	case DXGI_FORMAT_R32_FLOAT:
+		return DXGI_FORMAT_R32_FLOAT;
+
+#ifdef _DEBUG
+	case DXGI_FORMAT_R32G8X24_TYPELESS:
+	case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
+	case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS:
+	case DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:
+	case DXGI_FORMAT_D32_FLOAT:
+	case DXGI_FORMAT_R24G8_TYPELESS:
+	case DXGI_FORMAT_D24_UNORM_S8_UINT:
+	case DXGI_FORMAT_R24_UNORM_X8_TYPELESS:
+	case DXGI_FORMAT_X24_TYPELESS_G8_UINT:
+	case DXGI_FORMAT_D16_UNORM:
+
+		PRINTWARN( "Requested a UAV format for a depth stencil format." );
+#endif
+
+	default:
+		return m_Format;
+	}
+}
 
 //--------------------------------------------------------------------------------------
 // GpuBuffer
@@ -554,8 +705,8 @@ GpuBuffer::GpuBuffer()
 	:m_BufferSize( 0 ), m_ElementCount( 0 ), m_ElementSize( 0 )
 {
 	m_ResourceFlags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-	m_UAV.ptr = ~0ull;
-	m_SRV.ptr = ~0ull;
+	m_UAV.ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
+	m_SRV.ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
 }
 
 D3D12_RESOURCE_DESC GpuBuffer::DescribeBuffer()
@@ -588,7 +739,7 @@ void ByteAddressBuffer::CreateDerivedViews()
 	SRVDesc.Buffer.NumElements = (UINT)m_BufferSize / 4;
 	SRVDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
 
-	if (m_SRV.ptr == ~0ull)
+	if (m_SRV.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 		m_SRV = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
 	Graphics::g_device->CreateShaderResourceView( m_pResource.Get(), &SRVDesc, m_SRV );
 
@@ -598,7 +749,7 @@ void ByteAddressBuffer::CreateDerivedViews()
 	UAVDesc.Buffer.NumElements = (UINT)m_BufferSize / 4;
 	UAVDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_RAW;
 
-	if (m_UAV.ptr == ~0ull)
+	if (m_UAV.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 		m_UAV = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
 	Graphics::g_device->CreateUnorderedAccessView( m_pResource.Get(), nullptr, &UAVDesc, m_UAV );
 }
@@ -622,7 +773,7 @@ void StructuredBuffer::CreateDerivedViews()
 	SRVDesc.Buffer.StructureByteStride = m_ElementSize;
 	SRVDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
-	if (m_SRV.ptr == ~0ull)
+	if (m_SRV.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 		m_SRV = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
 	Graphics::g_device->CreateShaderResourceView( m_pResource.Get(), &SRVDesc, m_SRV );
 
@@ -636,7 +787,7 @@ void StructuredBuffer::CreateDerivedViews()
 
 	m_CounterBuffer.Create( L"StructuredBuffer::Counter", 1, 4 );
 
-	if (m_UAV.ptr == ~0ull)
+	if (m_UAV.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 		m_UAV = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
 	Graphics::g_device->CreateUnorderedAccessView( m_pResource.Get(), m_CounterBuffer.GetResource(), &UAVDesc, m_UAV );
 }
@@ -670,7 +821,7 @@ void TypedBuffer::CreateDerivedViews()
 	SRVDesc.Buffer.NumElements = m_ElementCount;
 	SRVDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 
-	if (m_SRV.ptr == ~0ull)
+	if (m_SRV.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 		m_SRV = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
 	Graphics::g_device->CreateShaderResourceView( m_pResource.Get(), &SRVDesc, m_SRV );
 
@@ -680,7 +831,7 @@ void TypedBuffer::CreateDerivedViews()
 	UAVDesc.Buffer.NumElements = m_ElementCount;
 	UAVDesc.Buffer.Flags = D3D12_BUFFER_UAV_FLAG_NONE;
 
-	if (m_UAV.ptr == ~0ull)
+	if (m_UAV.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 		m_UAV = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
 	Graphics::g_device->CreateUnorderedAccessView( m_pResource.Get(), nullptr, &UAVDesc, m_UAV );
 }
@@ -690,7 +841,7 @@ void TypedBuffer::CreateDerivedViews()
 //--------------------------------------------------------------------------------------
 Texture::Texture()
 {
-	m_hCpuDescriptorHandle.ptr = ~0ull;
+	m_hCpuDescriptorHandle.ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
 }
 
 Texture::Texture( D3D12_CPU_DESCRIPTOR_HANDLE Handle )
@@ -700,7 +851,7 @@ Texture::Texture( D3D12_CPU_DESCRIPTOR_HANDLE Handle )
 
 void Texture::Create( size_t Width, size_t Height, DXGI_FORMAT Format, const void* InitData )
 {
-	m_UsageState = D3D12_RESOURCE_STATE_COMMON;
+	m_UsageState = D3D12_RESOURCE_STATE_COPY_DEST;
 
 	D3D12_RESOURCE_DESC textDesc = {};
 	textDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -733,14 +884,14 @@ void Texture::Create( size_t Width, size_t Height, DXGI_FORMAT Format, const voi
 
 	CommandContext::InitializeTexture( *this, 1, &texResource );
 
-	if (m_hCpuDescriptorHandle.ptr == ~0ull)
+	if (m_hCpuDescriptorHandle.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 		m_hCpuDescriptorHandle = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
 	Graphics::g_device->CreateShaderResourceView( m_pResource.Get(), nullptr, m_hCpuDescriptorHandle );
 }
 
 bool Texture::CreateFromFIle( const wchar_t* FileName, bool sRGB )
 {
-	if (m_hCpuDescriptorHandle.ptr == ~0ull)
+	if (m_hCpuDescriptorHandle.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 		m_hCpuDescriptorHandle = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
 	HRESULT hr = CreateDDSTextureFromFile( Graphics::g_device.Get(), FileName, 0, sRGB, &m_pResource, m_hCpuDescriptorHandle );
 	return SUCCEEDED( hr );

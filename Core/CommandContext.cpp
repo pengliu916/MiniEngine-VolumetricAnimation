@@ -175,8 +175,6 @@ ComputeContext& CommandContext::GetComputeContext()
 
 void CommandContext::CopySubResource( GpuResource& Dest, UINT DestSubIndex, GpuResource& Src, UINT SrcSubIndex )
 {
-	TransitionResource( Dest, D3D12_RESOURCE_STATE_COPY_DEST );
-	TransitionResource( Src, D3D12_RESOURCE_STATE_COPY_SOURCE );
 	FlushResourceBarriers();
 
 	D3D12_TEXTURE_COPY_LOCATION DestLocation =
@@ -275,9 +273,8 @@ void CommandContext::InitializeTexture( GpuResource& Dest, UINT NumSubresources,
 		&BufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS( &UploadBuffer ) ) );
 
 	// Copy data to the intermediate upload heap and then schedule a copy from the upload heap to the default texture
-	InitContext.TransitionResource( Dest, D3D12_RESOURCE_STATE_COPY_DEST, true );
 	UpdateSubresources( InitContext.m_CommandList, Dest.GetResource(), UploadBuffer, 0, 0, NumSubresources, SubData );
-	InitContext.TransitionResource( Dest, D3D12_RESOURCE_STATE_GENERIC_READ, true );
+	InitContext.TransitionResource( Dest, D3D12_RESOURCE_STATE_GENERIC_READ );
 
 	// Execute the command list and wait for it to finish then we can release the upload buffer
 	InitContext.Finish( true );
@@ -326,8 +323,7 @@ void CommandContext::TransitionResource( GpuResource& Resource, D3D12_RESOURCE_S
 
 	if (m_NumBarriersToFlush != 0 && (FlushImmediate || m_NumBarriersToFlush == 16))
 	{
-		m_CommandList->ResourceBarrier( m_NumBarriersToFlush, m_ResourceBarrierBuffer );
-		m_NumBarriersToFlush = 0;
+		FlushResourceBarriers();
 	}
 }
 
@@ -357,8 +353,7 @@ void CommandContext::BeginResourceTransition( GpuResource& Resource, D3D12_RESOU
 
 	if (m_NumBarriersToFlush != 0 && (FlushImmediate || m_NumBarriersToFlush == 16))
 	{
-		m_CommandList->ResourceBarrier( m_NumBarriersToFlush, m_ResourceBarrierBuffer );
-		m_NumBarriersToFlush = 0;
+		FlushResourceBarriers();
 	}
 }
 
@@ -373,16 +368,8 @@ void CommandContext::InsertUAVBarrier( GpuResource& Resource, bool FlushImmediat
 
 	if (FlushImmediate)
 	{
-		m_CommandList->ResourceBarrier( m_NumBarriersToFlush, m_ResourceBarrierBuffer );
-		m_NumBarriersToFlush = 0;
+		FlushResourceBarriers();
 	}
-}
-
-void CommandContext::FlushResourceBarriers()
-{
-	if (m_NumBarriersToFlush == 0) return;
-	m_CommandList->ResourceBarrier( m_NumBarriersToFlush, m_ResourceBarrierBuffer );
-	m_NumBarriersToFlush = 0;
 }
 
 void CommandContext::BindDescriptorHeaps()
@@ -404,27 +391,30 @@ void CommandContext::BindDescriptorHeaps()
 //--------------------------------------------------------------------------------------
 // GraphicsContext
 //--------------------------------------------------------------------------------------
+void GraphicsContext::ClearUAV( GpuBuffer& Target )
+{
+	D3D12_GPU_DESCRIPTOR_HANDLE GpuVisibleHandle = m_DynamicDescriptorHeap.UploadDirect( Target.GetUAV() );
+	const UINT ClearColor[4] = {};
+	m_CommandList->ClearUnorderedAccessViewUint( GpuVisibleHandle, Target.GetUAV(), Target.GetResource(), ClearColor, 0, nullptr );
+}
+
 void GraphicsContext::ClearColor( ColorBuffer& Target )
 {
-	TransitionResource( Target, D3D12_RESOURCE_STATE_RENDER_TARGET, true );
 	m_CommandList->ClearRenderTargetView( Target.GetRTV(), reinterpret_cast<float*>(&Target.GetClearColor()), 0, nullptr );
 }
 
 void GraphicsContext::ClearDepth( DepthBuffer& Target )
 {
-	TransitionResource( Target, D3D12_RESOURCE_STATE_DEPTH_WRITE, true );
 	m_CommandList->ClearDepthStencilView( Target.GetDSV(), D3D12_CLEAR_FLAG_DEPTH, Target.GetClearDepth(), Target.GetClearStencil(), 0, nullptr );
 }
 
 void GraphicsContext::ClearStencil( DepthBuffer& Target )
 {
-	TransitionResource( Target, D3D12_RESOURCE_STATE_DEPTH_WRITE, true );
 	m_CommandList->ClearDepthStencilView( Target.GetDSV(), D3D12_CLEAR_FLAG_STENCIL, Target.GetClearDepth(), Target.GetClearStencil(), 0, nullptr );
 }
 
 void GraphicsContext::ClearDepthAndStencil( DepthBuffer& Target )
 {
-	TransitionResource( Target, D3D12_RESOURCE_STATE_DEPTH_WRITE, true );
 	m_CommandList->ClearDepthStencilView( Target.GetDSV(), D3D12_CLEAR_FLAG_STENCIL | D3D12_CLEAR_FLAG_DEPTH, Target.GetClearDepth(), Target.GetClearStencil(), 0, nullptr );
 }
 
@@ -443,31 +433,14 @@ void GraphicsContext::ResolveQueryData( ID3D12QueryHeap* QueryHeap, D3D12_QUERY_
 	m_CommandList->ResolveQueryData( QueryHeap, Type, StartIndex, NumQueries, DestinationBuffer, DestinationBufferOffset );
 }
 
-void GraphicsContext::SetRenderTargets( UINT NumRTVs, ColorBuffer* RTVs, DepthBuffer* DSV /* = nullptr */, bool ReadOnlyDepth /* = false */ )
+void GraphicsContext::SetRenderTargets(UINT NumRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE RTVs[], D3D12_CPU_DESCRIPTOR_HANDLE DSV)
 {
-	D3D12_CPU_DESCRIPTOR_HANDLE RTVHandles[8];
-	for (UINT i = 0; i < NumRTVs; ++i)
-	{
-		TransitionResource( RTVs[i], D3D12_RESOURCE_STATE_RENDER_TARGET );
-		RTVHandles[i] = RTVs[i].GetRTV();
-	}
-	if (DSV)
-	{
-		if (ReadOnlyDepth)
-		{
-			TransitionResource( *DSV, D3D12_RESOURCE_STATE_DEPTH_READ );
-			m_CommandList->OMSetRenderTargets( NumRTVs, RTVHandles, FALSE, &DSV->GetDSV_DepthReadOnly() );
-		}
-		else
-		{
-			TransitionResource( *DSV, D3D12_RESOURCE_STATE_DEPTH_WRITE );
-			m_CommandList->OMSetRenderTargets( NumRTVs, RTVHandles, FALSE, &DSV->GetDSV() );
-		}
-	}
-	else
-	{
-		m_CommandList->OMSetRenderTargets( NumRTVs, RTVHandles, FALSE, nullptr );
-	}
+	m_CommandList->OMSetRenderTargets(NumRTVs, RTVs, FALSE, &DSV);
+}
+
+void GraphicsContext::SetRenderTargets(UINT NumRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE RTVs[])
+{
+	m_CommandList->OMSetRenderTargets(NumRTVs, RTVs, FALSE, nullptr);
 }
 
 void GraphicsContext::SetViewport( const D3D12_VIEWPORT& vp )
@@ -500,4 +473,11 @@ ComputeContext& ComputeContext::Begin( const std::wstring& ID /* = L"" */, bool 
 		Async ? D3D12_COMMAND_LIST_TYPE_COMPUTE : D3D12_COMMAND_LIST_TYPE_DIRECT )->GetComputeContext();
 	NewContext.SetID( ID );
 	return NewContext;
+}
+
+void ComputeContext::ClearUAV( GpuBuffer& Target )
+{
+	D3D12_GPU_DESCRIPTOR_HANDLE GpuVisibleHandle = m_DynamicDescriptorHeap.UploadDirect( Target.GetUAV() );
+	const UINT ClearColor[4] = {};
+	m_CommandList->ClearUnorderedAccessViewUint( GpuVisibleHandle, Target.GetUAV(), Target.GetResource(), ClearColor, 0, nullptr );
 }

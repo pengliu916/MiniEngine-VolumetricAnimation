@@ -128,7 +128,7 @@ HRESULT GPU_Profiler::CreateResource()
 	// Create resource for drawing perf graph
 	m_RootSignature.Reset( 1 );
 	m_RootSignature[0].InitAsBufferSRV( 0, D3D12_SHADER_VISIBILITY_VERTEX );
-	m_RootSignature.Finalize();
+	m_RootSignature.Finalize(L"FXAA");
 
 	m_GraphPSO.SetRootSignature( m_RootSignature );
 	m_GraphPSO.SetRasterizerState( Graphics::g_RasterizerDefault );
@@ -245,7 +245,7 @@ void GPU_Profiler::DrawStats( GraphicsContext& gfxContext )
 	gfxContext.SetPipelineState( m_GraphPSO );
 	gfxContext.SetDynamicSRV( 0, sizeof( RectAttr )*(m_timerCount + 5), m_RectData );
 	gfxContext.SetPrimitiveTopology( D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP );
-	gfxContext.SetRenderTargets( 1, &Graphics::g_pDisplayPlanes[Graphics::g_CurrentDPIdx] );
+	gfxContext.SetRenderTargets( 1, &Graphics::g_pDisplayPlanes[Graphics::g_CurrentDPIdx].GetRTV() );
 	gfxContext.SetViewport( Graphics::g_DisplayPlaneViewPort );
 	gfxContext.SetScisor( Graphics::g_DisplayPlaneScissorRect );
 	gfxContext.DrawInstanced( 4, 1 );

@@ -60,7 +60,14 @@ private:
 //--------------------------------------------------------------------------------------
 // CommandContext
 //--------------------------------------------------------------------------------------
-class CommandContext
+struct NonCopyable
+{
+	NonCopyable() = default;
+	NonCopyable(const NonCopyable&) = delete;
+	NonCopyable & operator=(const NonCopyable&) = delete;
+};
+
+class CommandContext : NonCopyable
 {
 	friend ContextManager;
 private:
@@ -68,7 +75,6 @@ private:
 	void Reset();
 
 public:
-	CommandContext() = delete;
 	~CommandContext();
 
 	static void DestroyAllContexts();
@@ -95,7 +101,7 @@ public:
 	void BeginResourceTransition( GpuResource& Resource, D3D12_RESOURCE_STATES NewState, bool FlushImmediate = false );
 
 	void InsertUAVBarrier( GpuResource& Resource, bool FlushImmediate = false );
-	void FlushResourceBarriers();
+	inline void FlushResourceBarriers();
 
 	void InsertTimeStamp( ID3D12QueryHeap* pQueryHeap, uint32_t QueryIdx );
 	void ResolveTimeStamps( ID3D12Resource* pReadbackHeap, ID3D12QueryHeap* pQueryHeap, uint32_t NumQueries );
@@ -173,6 +179,13 @@ inline void CommandContext::SetDescriptorHeaps( UINT HeapCount, D3D12_DESCRIPTOR
 		BindDescriptorHeaps();
 }
 
+inline void CommandContext::FlushResourceBarriers()
+{
+	if (m_NumBarriersToFlush == 0) return;
+	m_CommandList->ResourceBarrier(m_NumBarriersToFlush, m_ResourceBarrierBuffer);
+	m_NumBarriersToFlush = 0;
+}
+
 inline void CommandContext::InsertTimeStamp( ID3D12QueryHeap* pQueryHeap, uint32_t QueryIdx )
 {
 	m_CommandList->EndQuery( pQueryHeap, D3D12_QUERY_TYPE_TIMESTAMP, QueryIdx );
@@ -219,6 +232,7 @@ public:
 		return CommandContext::Begin( ID ).GetGraphicsContext();
 	}
 
+	void ClearUAV( GpuBuffer& Target );
 	void ClearColor( ColorBuffer& Target );
 	void ClearDepth( DepthBuffer& Target );
 	void ClearStencil( DepthBuffer& Target );
@@ -229,7 +243,13 @@ public:
 	void ResolveQueryData( ID3D12QueryHeap* QueryHeap, D3D12_QUERY_TYPE Type, UINT StartIndex, UINT NumQueries, ID3D12Resource* DestinationBuffer, UINT64 DestinationBufferOffset );
 
 	void SetRootSignature( const RootSignature& RootSig );
-	void SetRenderTargets( UINT NumRTVs, ColorBuffer* RTVs, DepthBuffer* DSV = nullptr, bool ReadOnlyDepth = false );
+
+	void SetRenderTargets(UINT NumRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE RTVs[]);
+	void SetRenderTargets(UINT NumRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE RTVs[], D3D12_CPU_DESCRIPTOR_HANDLE DSV);
+	void SetRenderTarget(D3D12_CPU_DESCRIPTOR_HANDLE RTV) { SetRenderTargets(1, &RTV); }
+	void SetRenderTarget(D3D12_CPU_DESCRIPTOR_HANDLE RTV, D3D12_CPU_DESCRIPTOR_HANDLE DSV) { SetRenderTargets(1, &RTV, DSV); }
+	void SetDepthStencilTarget(D3D12_CPU_DESCRIPTOR_HANDLE DSV) { SetRenderTargets(0, nullptr, DSV); }
+
 	void SetViewport( const D3D12_VIEWPORT& vp );
 	void SetViewports( UINT NumVPs, const D3D12_VIEWPORT* vps );
 	void SetScisor( const D3D12_RECT& rect );
@@ -249,8 +269,8 @@ public:
 	void SetDynamicIB( D3D12_INDEX_BUFFER_VIEW& IBView );
 	void SetDynamicSRV( UINT RootIndex, size_t BufferSize, const void* BufferData );
 	void SetDynamicConstantBufferView( UINT RootIndex, size_t BufferSize, const void* BufferData );
-	void SetBufferSRV( UINT RootIndex, const GpuBuffer& SRV );
-	void SetBufferUAV( UINT RootIndex, const GpuBuffer& UAV );
+	void SetBufferSRV( UINT RootIndex, const GpuBuffer& SRV, UINT64 Offset = 0 );
+	void SetBufferUAV( UINT RootIndex, const GpuBuffer& UAV, UINT64 Offset = 0 );
 	void SetDescriptorTable( UINT RootIndex, D3D12_GPU_DESCRIPTOR_HANDLE FirstHandle );
 
 	void SetIndexBuffer( const D3D12_INDEX_BUFFER_VIEW& IBView );
@@ -379,16 +399,16 @@ inline void GraphicsContext::SetDynamicConstantBufferView( UINT RootIndex, size_
 	m_CommandList->SetGraphicsRootConstantBufferView( RootIndex, cb.GpuAddress );
 }
 
-inline void GraphicsContext::SetBufferSRV( UINT RootIndex, const GpuBuffer& SRV )
+inline void GraphicsContext::SetBufferSRV( UINT RootIndex, const GpuBuffer& SRV, UINT64 Offset )
 {
 	ASSERT( (SRV.m_UsageState & (D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE)) != 0 );
-	m_CommandList->SetGraphicsRootShaderResourceView( RootIndex, SRV.GetGpuVirtualAddress() );
+	m_CommandList->SetGraphicsRootShaderResourceView( RootIndex, SRV.GetGpuVirtualAddress() + Offset );
 }
 
-inline void GraphicsContext::SetBufferUAV( UINT RootIndex, const GpuBuffer& UAV )
+inline void GraphicsContext::SetBufferUAV( UINT RootIndex, const GpuBuffer& UAV, UINT64 Offset )
 {
 	ASSERT( (UAV.m_UsageState & D3D12_RESOURCE_STATE_UNORDERED_ACCESS) != 0 );
-	m_CommandList->SetGraphicsRootUnorderedAccessView( RootIndex, UAV.GetGpuVirtualAddress() );
+	m_CommandList->SetGraphicsRootUnorderedAccessView( RootIndex, UAV.GetGpuVirtualAddress() + Offset);
 }
 
 inline void GraphicsContext::SetDescriptorTable( UINT RootIndex, D3D12_GPU_DESCRIPTOR_HANDLE FirstHandle )
@@ -449,7 +469,7 @@ class ComputeContext : public CommandContext
 public:
 	static ComputeContext& Begin( const std::wstring& ID = L"", bool Async = false );
 
-	//void ClearUAV(GpuBuffer& Target);
+	void ClearUAV(GpuBuffer& Target);
 	//void ClearUAV(ColorBuffer& Target);
 
 	void SetRootSignature( const RootSignature& RootSig );
@@ -463,8 +483,8 @@ public:
 	void SetDynamicDescriptors( UINT RootIndex, UINT Offset, UINT Count, const D3D12_CPU_DESCRIPTOR_HANDLE Handles[] );
 	void SetDynamicSRV( UINT RootIndex, size_t BufferSize, const void* BufferData );
 	void SetDynamicConstantBufferView( UINT RootIndex, size_t BufferSize, const void* BufferData );
-	void SetBufferSRV( UINT RootIndex, const GpuBuffer& SRV );
-	void SetBufferUAV( UINT RootIndex, const GpuBuffer& UAV );
+	void SetBufferSRV( UINT RootIndex, const GpuBuffer& SRV, UINT64 Offset = 0 );
+	void SetBufferUAV( UINT RootIndex, const GpuBuffer& UAV, UINT64 Offset = 0 );
 	void SetDescriptorTable( UINT RootIndex, D3D12_GPU_DESCRIPTOR_HANDLE FirstHandle );
 
 	void Dispatch( size_t GroupCountX = 1, size_t GroupCountY = 1, size_t GroupCountZ = 1 );
@@ -546,16 +566,16 @@ inline void ComputeContext::SetDynamicConstantBufferView( UINT RootIndex, size_t
 	m_CommandList->SetComputeRootConstantBufferView( RootIndex, cb.GpuAddress );
 }
 
-inline void ComputeContext::SetBufferSRV( UINT RootIndex, const GpuBuffer& SRV )
+inline void ComputeContext::SetBufferSRV( UINT RootIndex, const GpuBuffer& SRV, UINT64 Offset)
 {
 	ASSERT( (SRV.m_UsageState & D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE) != 0 );
-	m_CommandList->SetComputeRootShaderResourceView( RootIndex, SRV.GetGpuVirtualAddress() );
+	m_CommandList->SetComputeRootShaderResourceView( RootIndex, SRV.GetGpuVirtualAddress() + Offset);
 }
 
-inline void ComputeContext::SetBufferUAV( UINT RootIndex, const GpuBuffer& UAV )
+inline void ComputeContext::SetBufferUAV( UINT RootIndex, const GpuBuffer& UAV, UINT64 Offset )
 {
 	ASSERT( (UAV.m_UsageState & D3D12_RESOURCE_STATE_UNORDERED_ACCESS) != 0 );
-	m_CommandList->SetComputeRootUnorderedAccessView( RootIndex, UAV.GetGpuVirtualAddress() );
+	m_CommandList->SetComputeRootUnorderedAccessView( RootIndex, UAV.GetGpuVirtualAddress() + Offset);
 }
 
 inline void ComputeContext::SetDescriptorTable( UINT RootIndex, D3D12_GPU_DESCRIPTOR_HANDLE FirstHandle )
