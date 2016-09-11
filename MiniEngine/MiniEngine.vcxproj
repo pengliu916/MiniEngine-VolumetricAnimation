@@ -45,13 +45,7 @@
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-  </ImportGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
-  </ImportGroup>
-  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Profile|x64'" Label="PropertySheets">
+  <ImportGroup Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
@@ -60,7 +54,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <SDLCheck>false</SDLCheck>
+      <SDLCheck>true</SDLCheck>
       <FloatingPointModel>Fast</FloatingPointModel>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>DEBUG;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -103,156 +97,78 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Camera.cpp" />
-    <ClCompile Include="Core\CmdListMngr.cpp" />
-    <ClCompile Include="Core\CommandContext.cpp" />
-    <ClCompile Include="Core\CommandSignature.cpp" />
-    <ClCompile Include="Core\DescriptorHeap.cpp" />
-    <ClCompile Include="Core\DX12Framework.cpp" />
-    <ClCompile Include="Core\DynamicDescriptorHeap.cpp" />
-    <ClCompile Include="Core\GpuResource.cpp" />
-    <ClCompile Include="Core\Graphics.cpp" />
-    <ClCompile Include="Core\LibraryHeader.cpp" />
-    <ClCompile Include="Core\LinearAllocator.cpp" />
-    <ClCompile Include="Core\PipelineState.cpp" />
-    <ClCompile Include="Core\RootSignature.cpp" />
-    <ClCompile Include="Core\SamplerMngr.cpp" />
-    <ClCompile Include="DDSTextureLoader.cpp" />
-    <ClCompile Include="FXAA.cpp" />
-    <ClCompile Include="GPU_Profiler.cpp" />
-    <ClCompile Include="GuiRenderer.cpp" />
-    <ClCompile Include="ImGUI\imgui.cpp" />
-    <ClCompile Include="ImGUI\imgui_demo.cpp" />
-    <ClCompile Include="ImGUI\imgui_draw.cpp" />
-    <ClCompile Include="MsgPrinting.cpp" />
-    <ClCompile Include="TextRenderer.cpp" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="Camera.h" />
+    <ClCompile Include="Camera.cpp" />
     <ClInclude Include="Core\CmdListMngr.h" />
+    <ClCompile Include="Core\CmdListMngr.cpp" />
     <ClInclude Include="Core\CommandContext.h" />
+    <ClCompile Include="Core\CommandContext.cpp" />
     <ClInclude Include="Core\CommandSignature.h" />
+    <ClCompile Include="Core\CommandSignature.cpp" />
     <ClInclude Include="Core\d3dx12.h" />
     <ClInclude Include="Core\dds.h" />
     <ClInclude Include="Core\DescriptorHeap.h" />
+    <ClCompile Include="Core\DescriptorHeap.cpp" />
     <ClInclude Include="Core\DX12Framework.h" />
+    <ClCompile Include="Core\DX12Framework.cpp" />
     <ClInclude Include="Core\DynamicDescriptorHeap.h" />
+    <ClCompile Include="Core\DynamicDescriptorHeap.cpp" />
     <ClInclude Include="Core\GpuResource.h" />
+    <ClCompile Include="Core\GpuResource.cpp" />
     <ClInclude Include="Core\Graphics.h" />
+    <ClCompile Include="Core\Graphics.cpp" />
     <ClInclude Include="Core\LibraryHeader.h" />
+    <ClCompile Include="Core\LibraryHeader.cpp" />
     <ClInclude Include="Core\LinearAllocator.h" />
+    <ClCompile Include="Core\LinearAllocator.cpp" />
     <ClInclude Include="Core\PipelineState.h" />
+    <ClCompile Include="Core\PipelineState.cpp" />
     <ClInclude Include="Core\RootSignature.h" />
+    <ClCompile Include="Core\RootSignature.cpp" />
     <ClInclude Include="Core\SamplerMngr.h" />
+    <ClCompile Include="Core\SamplerMngr.cpp" />
     <ClInclude Include="dds.h" />
     <ClInclude Include="DDSTextureLoader.h" />
+    <ClCompile Include="DDSTextureLoader.cpp" />
     <ClInclude Include="DXHelper.h" />
     <ClInclude Include="FXAA.h" />
+    <ClCompile Include="FXAA.cpp" />
     <ClInclude Include="GPU_Profiler.h" />
+    <ClCompile Include="GPU_Profiler.cpp" />
     <ClInclude Include="GuiRenderer.h" />
+    <ClCompile Include="GuiRenderer.cpp" />
     <ClInclude Include="ImGUI\imconfig.h" />
     <ClInclude Include="ImGUI\imgui.h" />
+    <ClCompile Include="ImGUI\imgui.cpp" />
+    <ClCompile Include="ImGUI\imgui_demo.cpp" />
+    <ClCompile Include="ImGUI\imgui_draw.cpp" />
     <ClInclude Include="ImGUI\imgui_internal.h" />
     <ClInclude Include="ImGUI\stb_rect_pack.h" />
     <ClInclude Include="ImGUI\stb_textedit.h" />
     <ClInclude Include="ImGUI\stb_truetype.h" />
     <ClInclude Include="MsgPrinting.h" />
+    <ClCompile Include="MsgPrinting.cpp" />
     <ClInclude Include="TextRenderer.h" />
+    <ClCompile Include="TextRenderer.cpp" />
     <ClInclude Include="Utility.h" />
   </ItemGroup>
+  <ItemDefinitionGroup>
+    <CustomBuild>
+      <FileType>Document</FileType>
+      <DeploymentContent>true</DeploymentContent>
+      <Command>copy %(Identity) "$(OutDir)" &gt;NUL</Command>
+      <TreatOutputAsContent>true</TreatOutputAsContent>
+      <Outputs>$(OutDir)\%(Filename)%(Extension)</Outputs>
+      <Message>Copying '%(Identity)' to '$(OutDir)'</Message>
+    </CustomBuild>
+  </ItemDefinitionGroup>
   <ItemGroup>
-    <CustomBuild Include="Core\Graphics.hlsl">
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DeploymentContent>
-      <FileType>Document</FileType>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</DeploymentContent>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">true</DeploymentContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</TreatOutputAsContent>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</TreatOutputAsContent>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">true</TreatOutputAsContent>
-    </CustomBuild>
-    <CustomBuild Include="FXAA.hlsl">
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DeploymentContent>
-      <FileType>Document</FileType>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</DeploymentContent>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">true</DeploymentContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</TreatOutputAsContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</TreatOutputAsContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">true</TreatOutputAsContent>
-    </CustomBuild>
-    <CustomBuild Include="GPU_Profiler.hlsl">
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DeploymentContent>
-      <FileType>Document</FileType>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</DeploymentContent>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">true</DeploymentContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</TreatOutputAsContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</TreatOutputAsContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">true</TreatOutputAsContent>
-    </CustomBuild>
-    <CustomBuild Include="TextRenderer.hlsl">
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DeploymentContent>
-      <FileType>Document</FileType>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</DeploymentContent>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">true</DeploymentContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</TreatOutputAsContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</TreatOutputAsContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">true</TreatOutputAsContent>
-    </CustomBuild>
-  </ItemGroup>
-  <ItemGroup>
-    <CustomBuild Include="FXAA_SharedHeader.inl">
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DeploymentContent>
-      <FileType>Document</FileType>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</DeploymentContent>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">true</DeploymentContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</TreatOutputAsContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</TreatOutputAsContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">true</TreatOutputAsContent>
-    </CustomBuild>
-    <CustomBuild Include="TextRenderer_SharedHeader.inl">
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DeploymentContent>
-      <FileType>Document</FileType>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</DeploymentContent>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">true</DeploymentContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</TreatOutputAsContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</TreatOutputAsContent>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">copy %(Identity) "$(OutDir)" &gt;NUL</Command>
-      <Outputs Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">$(OutDir)\%(Identity)</Outputs>
-      <TreatOutputAsContent Condition="'$(Configuration)|$(Platform)'=='Profile|x64'">true</TreatOutputAsContent>
-    </CustomBuild>
+    <CustomBuild Include="Core\Graphics.hlsl" />
+    <CustomBuild Include="FXAA.hlsl" />
+    <CustomBuild Include="GPU_Profiler.hlsl" />
+    <CustomBuild Include="TextRenderer.hlsl" />
+    <CustomBuild Include="FXAA_SharedHeader.inl" />
+    <CustomBuild Include="TextRenderer_SharedHeader.inl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -56,8 +56,6 @@
     <ClCompile Include="ImGUI\imgui_draw.cpp">
       <Filter>ImGUI</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="Camera.h" />
     <ClInclude Include="dds.h" />
     <ClInclude Include="DDSTextureLoader.h" />
