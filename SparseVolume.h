@@ -1,5 +1,5 @@
 #pragma once
-#include "SparseVolume_SharedHeader.inl"
+#include "SparseVolume.inl"
 class SparseVolume
 {
 protected:

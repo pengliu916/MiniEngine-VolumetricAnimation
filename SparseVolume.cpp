@@ -69,60 +69,51 @@ SparseVolume::OnCreateResource()
     uint32_t compileFlags = D3DCOMPILE_OPTIMIZATION_LEVEL3;
     D3D_SHADER_MACRO macro[] = {
         {"__hlsl", "1"},//0
-        {"COMPUTE_SHADER", "0"},//1
-        {"CUBE_VS", "0"},//2
-        {"RAYCAST_PS", "0"},//3
-        {"TYPED_UAV", "0"},//4
-        {"STRUCT_UAV", "0"},//5
-        {"TEX3D_UAV", "0"},//6
-        {"FILTER_READ", "0"},//7
+        {"TYPED_UAV", "0"},//1
+        {"STRUCT_UAV", "0"},//2
+        {"TEX3D_UAV", "0"},//3
+        {"FILTER_READ", "0"},//4
         {nullptr, nullptr}
     };
 
-    macro[2].Definition = "1"; // CUBE_VS
     V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-        _T("SparseVolume.hlsl")).c_str(),macro,
+        _T("SparseVolume_vs.hlsl")).c_str(),macro,
         D3D_COMPILE_STANDARD_FILE_INCLUDE, "vs_cube_main",
         "vs_5_1", compileFlags, 0, &Cube_VS));
-    macro[2].Definition = "0"; // CUBE_VS
 
     uint DefIdx;
     for (int i = 0; i < kNumBufferType; ++i) {
         switch ((BufferType)i) {
-            case kStructuredBuffer: DefIdx = 5; break;
-            case kTypedBuffer: DefIdx = 4; break;
-            case k3DTexBuffer: DefIdx = 6; break;
+            case kStructuredBuffer: DefIdx = 2; break;
+            case kTypedBuffer: DefIdx = 1; break;
+            case k3DTexBuffer: DefIdx = 3; break;
         }
         macro[DefIdx].Definition = "1";
-        macro[1].Definition = "1"; // COMPUTE_SHADER
         V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-            _T("SparseVolume.hlsl")).c_str(), macro,
+            _T("SparseVolume_cs.hlsl")).c_str(), macro,
             D3D_COMPILE_STANDARD_FILE_INCLUDE, "cs_volumeupdate_main",
             "cs_5_1", compileFlags, 0, &VolumeUpdate_CS[i]));
-        macro[1].Definition = "0"; // COMPUTE_SHADER
 
-        macro[3].Definition = "1"; // RAYCAST_PS
         V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-            _T("SparseVolume.hlsl")).c_str(), macro,
+            _T("SparseVolume_ps.hlsl")).c_str(), macro,
             D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_raycast_main",
             "ps_5_1", compileFlags, 0, &Raycast_PS[i][kNoFilter]));
-        macro[7].Definition = "1"; // FILTER_READ
+        macro[4].Definition = "1"; // FILTER_READ
         V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-            _T("SparseVolume.hlsl")).c_str(), macro,
+            _T("SparseVolume_ps.hlsl")).c_str(), macro,
             D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_raycast_main",
             "ps_5_1", compileFlags, 0, &Raycast_PS[i][kLinearFilter]));
-        macro[7].Definition = "2"; // FILTER_READ
+        macro[4].Definition = "2"; // FILTER_READ
         V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-            _T("SparseVolume.hlsl")).c_str(), macro,
+            _T("SparseVolume_ps.hlsl")).c_str(), macro,
             D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_raycast_main",
             "ps_5_1", compileFlags, 0, &Raycast_PS[i][kSamplerLinear]));
-        macro[7].Definition = "3"; // FILTER_READ
+        macro[4].Definition = "3"; // FILTER_READ
         V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-            _T("SparseVolume.hlsl")).c_str(), macro,
+            _T("SparseVolume_ps.hlsl")).c_str(), macro,
             D3D_COMPILE_STANDARD_FILE_INCLUDE, "ps_raycast_main",
             "ps_5_1", compileFlags, 0, &Raycast_PS[i][kSamplerAniso]));
-        macro[7].Definition = "0"; // FILTER_READ
-        macro[3].Definition = "0"; // RAYCAST_PS
+        macro[4].Definition = "0"; // FILTER_READ
         macro[DefIdx].Definition = "0";
     }
     // Create Rootsignature

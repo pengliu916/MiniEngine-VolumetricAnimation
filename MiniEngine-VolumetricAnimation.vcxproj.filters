@@ -2,37 +2,42 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="Main.cpp" />
+    <ClInclude Include="stdafx.h" />
     <ClCompile Include="stdafx.cpp" />
+    <ClInclude Include="VolumetricAnimation.h" />
     <ClCompile Include="VolumetricAnimation.cpp" />
+    <CustomBuild Include="D3DX_DXGIFormatConvert.inl" />
     <ClCompile Include="DenseVolume.cpp">
       <Filter>DenseVolume</Filter>
     </ClCompile>
     <ClCompile Include="SparseVolume.cpp">
       <Filter>SparseVolume</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="stdafx.h" />
-    <ClInclude Include="VolumetricAnimation.h" />
     <ClInclude Include="DenseVolume.h">
       <Filter>DenseVolume</Filter>
     </ClInclude>
     <ClInclude Include="SparseVolume.h">
       <Filter>SparseVolume</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <CustomBuild Include="D3DX_DXGIFormatConvert.inl" />
     <CustomBuild Include="DenseVolume.hlsl">
       <Filter>DenseVolume</Filter>
     </CustomBuild>
     <CustomBuild Include="DenseVolume_SharedHeader.inl">
       <Filter>DenseVolume</Filter>
     </CustomBuild>
-    <CustomBuild Include="SparseVolume.hlsl">
+    <CustomBuild Include="SparseVolume_vs.hlsl">
       <Filter>SparseVolume</Filter>
     </CustomBuild>
-    <CustomBuild Include="SparseVolume_SharedHeader.inl">
+    <CustomBuild Include="SparseVolume_ps.hlsl">
+      <Filter>SparseVolume</Filter>
+    </CustomBuild>
+    <CustomBuild Include="SparseVolume_cs.hlsl">
+      <Filter>SparseVolume</Filter>
+    </CustomBuild>
+    <CustomBuild Include="SparseVolume.ihlsl">
+      <Filter>SparseVolume</Filter>
+    </CustomBuild>
+    <CustomBuild Include="SparseVolume.inl">
       <Filter>SparseVolume</Filter>
     </CustomBuild>
   </ItemGroup>
