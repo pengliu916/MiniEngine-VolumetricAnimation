@@ -34,7 +34,7 @@
     <CustomBuild Include="SparseVolume_cs.hlsl">
       <Filter>SparseVolume</Filter>
     </CustomBuild>
-    <CustomBuild Include="SparseVolume.ihlsl">
+    <CustomBuild Include="SparseVolume.hlsli">
       <Filter>SparseVolume</Filter>
     </CustomBuild>
     <CustomBuild Include="SparseVolume.inl">

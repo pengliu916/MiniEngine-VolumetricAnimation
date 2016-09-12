@@ -135,7 +135,7 @@
     <CustomBuild Include="SparseVolume_vs.hlsl" />
     <CustomBuild Include="SparseVolume_ps.hlsl" />
     <CustomBuild Include="SparseVolume_cs.hlsl" />
-    <CustomBuild Include="SparseVolume.ihlsl" />
+    <CustomBuild Include="SparseVolume.hlsli" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
