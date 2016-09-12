@@ -184,10 +184,9 @@ SparseVolume::OnCreateResource()
     const uint32_t vertexBufferSize = sizeof(cubeVertices);
     _vertexBuffer.Create(L"Vertex Buffer", ARRAYSIZE(cubeVertices),
         sizeof(XMFLOAT3), (void*)cubeVertices);
-
+    
     uint16_t cubeIndices[] = {
-        0,2,1, 1,2,3,  4,5,6, 5,7,6,  0,1,5, 0,5,4,
-        2,6,7, 2,7,3,  0,4,6, 0,6,2,  1,3,7, 1,7,5,
+        6, 4, 2, 0, 1, 4, 5, 7, 1, 3, 2, 7, 6, 4
     };
 
     _indexBuffer.Create(L"Index Buffer", ARRAYSIZE(cubeIndices),
@@ -321,7 +320,7 @@ SparseVolume::OnRender(CommandContext& cmdContext, DirectX::XMMATRIX wvp,
         gfxContext.SetRootSignature(_rootsignature);
         gfxContext.SetPipelineState(
             _graphicRenderPSO[_currentBufferType][0][_currentFilterType]);
-        gfxContext.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        gfxContext.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
         gfxContext.SetDynamicConstantBufferView(
             0, sizeof(_perFrameConstantBufferData),
             (void*)&_perFrameConstantBufferData);
@@ -351,7 +350,7 @@ SparseVolume::OnRender(CommandContext& cmdContext, DirectX::XMMATRIX wvp,
         gfxContext.SetScisor(Graphics::g_DisplayPlaneScissorRect);
         gfxContext.SetVertexBuffer(0, _vertexBuffer.VertexBufferView());
         gfxContext.SetIndexBuffer(_indexBuffer.IndexBufferView());
-        gfxContext.DrawIndexed(36);
+        gfxContext.DrawIndexed(14);
     }
 #undef BindVolumeResource
     switch (_currentBufferType) {
