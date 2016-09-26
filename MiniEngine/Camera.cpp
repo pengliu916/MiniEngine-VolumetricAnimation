@@ -61,8 +61,8 @@ void OrbitCamera::View( DirectX::XMVECTOR center, float radius, float minRadius,
 
 void OrbitCamera::Projection( float fov, float aspect )
 {
-	float fovY = (aspect <= 1.0 ? fov : fov / aspect);
-	mProjection = XMMatrixPerspectiveFovRH( fovY, aspect, 10000.0f, 0.1f );
+	// fov is horizontal field of view
+	mProjection = XMMatrixPerspectiveFovRH( fov, aspect, 10000.0f, 0.1f );
 	UpdateData();
 }
 
