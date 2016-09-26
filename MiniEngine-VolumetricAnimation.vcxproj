@@ -54,7 +54,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <SDLCheck>true</SDLCheck>
+      <SDLCheck>false</SDLCheck>
       <AdditionalIncludeDirectories>.\MiniEngine\Core;.\MiniEngine\ImGUI;.\MiniEngine;.</AdditionalIncludeDirectories>
       <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -106,6 +106,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp" />
+    <ClInclude Include="ManagedBuf.h" />
+    <ClCompile Include="ManagedBuf.cpp" />
     <ClInclude Include="VolumetricAnimation.h" />
     <ClCompile Include="VolumetricAnimation.cpp" />
     <ClInclude Include="DenseVolume.h" />
@@ -132,9 +134,12 @@
     <CustomBuild Include="DenseVolume.hlsl" />
     <CustomBuild Include="DenseVolume_SharedHeader.inl" />
     <CustomBuild Include="SparseVolume.inl" />
-    <CustomBuild Include="SparseVolume_vs.hlsl" />
-    <CustomBuild Include="SparseVolume_ps.hlsl" />
-    <CustomBuild Include="SparseVolume_cs.hlsl" />
+    <CustomBuild Include="SparseVolume_RayCast_vs.hlsl" />
+    <CustomBuild Include="SparseVolume_RayCast_ps.hlsl" />
+    <CustomBuild Include="SparseVolume_StepInfo_vs.hlsl" />
+    <CustomBuild Include="SparseVolume_StepInfo_ps.hlsl" />
+    <CustomBuild Include="SparseVolume_StepInfo_cs.hlsl" />
+    <CustomBuild Include="SparseVolume_VolumeUpdate_cs.hlsl" />
     <CustomBuild Include="SparseVolume.hlsli" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

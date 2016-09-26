@@ -1,10 +1,21 @@
+#if !__hlsl
+#pragma once
+#endif // !__hlsl
+
+
 // Params
 #define MAX_BALLS 128
 #define THREAD_X 8
 #define THREAD_Y 8
 #define THREAD_Z 8
-
+#define MAX_DEPTH 10000
 // Do not modify below this line
+
+// The length of cube triangles-strip vertices
+#define CUBE_TRIANGLESTRIP_LENGTH 14
+// The length of cube line-strip vertices
+#define CUBE_LINESTRIP_LENGTH 19
+
 #if __hlsl
 #define CBUFFER_ALIGN
 #define REGISTER(x) :register(x)
@@ -21,6 +32,18 @@ typedef DirectX::XMFLOAT2 float2;
 typedef DirectX::XMUINT3 uint3;
 typedef uint32_t uint;
 #endif
+
+// will be put into constant buffer, pay attention to alignment
+struct VolumeParam {
+    uint3 u3VoxelReso;
+    uint uVoxelBrickRatio;
+    float3 f3InvVolSize;
+    float fVoxelSize;
+    float3 f3BoxMin;
+    float fMaxDensity;
+    float3 f3BoxMax;
+    float fMinDensity;
+};
 
 CBUFFER_ALIGN STRUCT(cbuffer) PerFrameDataCB REGISTER(b0)
 {
@@ -42,17 +65,9 @@ CBUFFER_ALIGN STRUCT(cbuffer) PerFrameDataCB REGISTER(b0)
 
 CBUFFER_ALIGN STRUCT(cbuffer) PerCallDataCB REGISTER(b1)
 {
-    uint3 u3VoxelReso;
-    float fVoxelSize;
-    float3 f3InvVolSize;
-    float NIU;
-    float2 f2MinMaxDensity;
-    uint uVoxelBrickRatio;
+    VolumeParam vParam;
     uint uNumOfBalls;
-    float3 f3BoxMin;
-    float NIU1;
-    float3 f3BoxMax;
-    int NIU2;
+    uint NIU[3];
 #if !__hlsl
     void* operator new(size_t i) {
         return _aligned_malloc(i, 

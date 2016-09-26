@@ -1,5 +1,5 @@
 #include "SparseVolume.inl"
-#include "SparseVolume.ihlsl"
+#include "SparseVolume.hlsli"
 
 #if TYPED_UAV
 RWBuffer<float4> tex_uavDataVol : register(u0);
@@ -29,10 +29,11 @@ float Ball(float3 f3Pos, float3 f3Center, float fRadiusSq)
 // Compute Shader
 //------------------------------------------------------------------------------
 [numthreads(THREAD_X, THREAD_Y, THREAD_Z)]
-void cs_volumeupdate_main(uint3 u3DTid: SV_DispatchThreadID)
+void main(uint3 u3DTid: SV_DispatchThreadID)
 {
     // Current voxel pos in local space
-    float3 currentPos = (u3DTid - u3VoxelReso * 0.5f + 0.5f) * fVoxelSize;
+    float3 currentPos =
+        (u3DTid - vParam.u3VoxelReso * 0.5f + 0.5f) * vParam.fVoxelSize;
     // Voxel content: x-density, yzw-color
     float4 f4Field = float4(0.f, 1.f, 1.f, 1.f);
     // Update voxel based on its position
@@ -47,8 +48,8 @@ void cs_volumeupdate_main(uint3 u3DTid: SV_DispatchThreadID)
     tex_uavDataVol[BUFFER_INDEX(u3DTid)] = f4Field;
 #if ENABLE_BRICKS
     // Update brick structure
-    if (f4Field.x >= f2MinMaxDensity.x && field.x <= f2MinMaxDensity.y) {
-        tex_uavFlagVol[u3DTid / uVoxelBrickRatio] = 1;
+    if (f4Field.x >= vParam.fMinDensity && f4Field.x <= vParam.fMaxDensity) {
+        tex_uavFlagVol[u3DTid / vParam.uVoxelBrickRatio] = 1;
     }
 #endif // ENABLE_BRICKS
 }

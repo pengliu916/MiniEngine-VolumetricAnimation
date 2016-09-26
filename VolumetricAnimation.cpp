@@ -49,6 +49,7 @@ HRESULT VolumetricAnimation::OnSizeChanged()
 
     float fAspectRatio = width / (FLOAT)height;
     m_camera.Projection(XM_PIDIV2 / 2, fAspectRatio);
+    m_SparseVolume.OnResize();
     return S_OK;
 }
 
@@ -56,7 +57,6 @@ HRESULT VolumetricAnimation::OnSizeChanged()
 void VolumetricAnimation::OnUpdate()
 {
     m_camera.ProcessInertia();
-    //m_camera.OrbitX( Core::g_deltaTime );
     static bool showPenal = true;
     if (ImGui::Begin("VolumetricAnimation", &showPenal)) {
         ImGui::RadioButton("SparseVolume", &m_CurVolType, kSparseVolume);
@@ -101,7 +101,7 @@ bool VolumetricAnimation::OnEvent(MSG* msg)
     switch (msg->message) {
         case WM_MOUSEWHEEL: {
             auto delta = GET_WHEEL_DELTA_WPARAM(msg->wParam);
-            m_camera.ZoomRadius(-0.007f*delta);
+            m_camera.ZoomRadius(-0.002f*delta);
             return true;
         }
         case WM_POINTERDOWN:

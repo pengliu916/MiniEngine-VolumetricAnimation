@@ -25,13 +25,13 @@
     <CustomBuild Include="DenseVolume_SharedHeader.inl">
       <Filter>DenseVolume</Filter>
     </CustomBuild>
-    <CustomBuild Include="SparseVolume_vs.hlsl">
+    <CustomBuild Include="SparseVolume_RayCast_vs.hlsl">
       <Filter>SparseVolume</Filter>
     </CustomBuild>
-    <CustomBuild Include="SparseVolume_ps.hlsl">
+    <CustomBuild Include="SparseVolume_RayCast_ps.hlsl">
       <Filter>SparseVolume</Filter>
     </CustomBuild>
-    <CustomBuild Include="SparseVolume_cs.hlsl">
+    <CustomBuild Include="SparseVolume_VolumeUpdate_cs.hlsl">
       <Filter>SparseVolume</Filter>
     </CustomBuild>
     <CustomBuild Include="SparseVolume.hlsli">
@@ -40,6 +40,7 @@
     <CustomBuild Include="SparseVolume.inl">
       <Filter>SparseVolume</Filter>
     </CustomBuild>
+    <ClCompile Include="ManagedBuf.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="DenseVolume">
@@ -48,5 +49,19 @@
     <Filter Include="SparseVolume">
       <UniqueIdentifier>{33f3ad9f-811e-4403-84f3-18cac2e8f3ab}</UniqueIdentifier>
     </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ManagedBuf.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="SparseVolume_StepInfo_cs.hlsl">
+      <Filter>SparseVolume</Filter>
+    </CustomBuild>
+    <CustomBuild Include="SparseVolume_StepInfo_ps.hlsl">
+      <Filter>SparseVolume</Filter>
+    </CustomBuild>
+    <CustomBuild Include="SparseVolume_StepInfo_vs.hlsl">
+      <Filter>SparseVolume</Filter>
+    </CustomBuild>
   </ItemGroup>
 </Project>

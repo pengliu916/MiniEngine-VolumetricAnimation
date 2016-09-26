@@ -38,8 +38,8 @@ private:
     uint32_t m_width;
     uint32_t m_height;
     float m_camOrbitRadius = 2.f;
-    float m_camMaxOribtRadius = 50.f;
-    float m_camMinOribtRadius = .2f;
+    float m_camMaxOribtRadius = 5.f;
+    float m_camMinOribtRadius = 1.f;
 
     OrbitCamera m_camera;
 
