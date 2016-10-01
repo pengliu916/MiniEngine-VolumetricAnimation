@@ -67,6 +67,12 @@ protected:
 	D3D12_RESOURCE_DESC DescribeTex2D( uint32_t Width, uint32_t Height, uint32_t DepthOrArraySize,
 		uint32_t NumMips, DXGI_FORMAT Format, UINT Flags );
 
+	D3D12_RESOURCE_DESC DescribeTex3D(uint32_t Width, uint32_t Height, uint32_t Depth,
+		uint32_t NumMips, DXGI_FORMAT Format, UINT Flags);
+
+	D3D12_RESOURCE_DESC DescribeTex(uint32_t Width, uint32_t Height, uint32_t Depth,
+		uint32_t NumMips, DXGI_FORMAT Format, UINT Flags, D3D12_RESOURCE_DIMENSION Dimension);
+
 	void AssociateWithResource( ID3D12Device* Device, const std::wstring& Name,
 		ID3D12Resource* Resource, D3D12_RESOURCE_STATES CurrentState );
 
@@ -166,33 +172,36 @@ protected:
 //--------------------------------------------------------------------------------------
 // VolumeTexture
 //--------------------------------------------------------------------------------------
-class VolumeTexture : public GpuResource
+class VolumeTexture : public PixelBuffer
 {
 public:
-	VolumeTexture();
-	void Create( const std::wstring& Name, uint32_t Width, uint32_t Height, uint32_t Depth, DXGI_FORMAT Format);
-	uint32_t GetWidth() const { return m_Width; }
-	uint32_t GetHeight() const { return m_Height; }
-	uint32_t GetDepth() const { return m_Depth; }
-	const DXGI_FORMAT& GetFormat() const { return m_Format; }
+	VolumeTexture( DirectX::XMVECTOR ClearColor = DirectX::XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f))
+		: m_ClearColor(ClearColor), m_NumMipMaps(0) {
+		m_SRVHandle.ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
+		m_RTVHandle.ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
+		m_UAVHandle.ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
+	}
+	void Create(const std::wstring& Name, uint32_t Width, uint32_t Height, uint32_t Depth,
+		uint32_t MipMaps, DXGI_FORMAT Format, D3D12_GPU_VIRTUAL_ADDRESS VidMemPtr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN);
 
 	const D3D12_CPU_DESCRIPTOR_HANDLE& GetSRV() const { return m_SRVHandle; }
+	const D3D12_CPU_DESCRIPTOR_HANDLE& GetRTV() const { return m_RTVHandle; }
 	const D3D12_CPU_DESCRIPTOR_HANDLE& GetUAV() const { return m_UAVHandle; }
 
 protected:
-	D3D12_RESOURCE_DESC DescribeTex3D( uint32_t Width, uint32_t Height, uint32_t Depth,
-		DXGI_FORMAT Format);
+	static inline uint32_t ComputeNumMips(uint32_t Width, uint32_t Height)
+	{
+		uint32_t HighBit;
+		_BitScanReverse((unsigned long*)&HighBit, Width | Height);
+		return HighBit + 1;
+	}
 	void CreateDerivedViews();
 
-	DXGI_FORMAT GetBaseFormat();
-	DXGI_FORMAT GetUAVFormat();
-
-	uint32_t m_Width;
-	uint32_t m_Height;
-	uint32_t m_Depth;
-	DXGI_FORMAT m_Format;
+	DirectX::XMVECTOR m_ClearColor;
 	D3D12_CPU_DESCRIPTOR_HANDLE m_SRVHandle;
+	D3D12_CPU_DESCRIPTOR_HANDLE m_RTVHandle;
 	D3D12_CPU_DESCRIPTOR_HANDLE m_UAVHandle;
+	uint32_t m_NumMipMaps;
 };
 
 //--------------------------------------------------------------------------------------

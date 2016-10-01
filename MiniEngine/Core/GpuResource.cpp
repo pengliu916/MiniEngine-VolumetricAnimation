@@ -14,6 +14,18 @@
 D3D12_RESOURCE_DESC PixelBuffer::DescribeTex2D( uint32_t Width, uint32_t Height, uint32_t DepthOrArraySize,
 	uint32_t NumMips, DXGI_FORMAT Format, UINT Flags )
 {
+	return DescribeTex(Width, Height, DepthOrArraySize, NumMips, Format, Flags, D3D12_RESOURCE_DIMENSION_TEXTURE2D);
+}
+
+D3D12_RESOURCE_DESC PixelBuffer::DescribeTex3D(uint32_t Width, uint32_t Height, uint32_t Depth,
+	uint32_t NumMips, DXGI_FORMAT Format, UINT Flags)
+{
+	return DescribeTex(Width, Height, Depth, NumMips, Format, Flags, D3D12_RESOURCE_DIMENSION_TEXTURE3D);
+}
+
+D3D12_RESOURCE_DESC PixelBuffer::DescribeTex(uint32_t Width, uint32_t Height, uint32_t DepthOrArraySize,
+	uint32_t NumMips, DXGI_FORMAT Format, UINT Flags, D3D12_RESOURCE_DIMENSION Dimension)
+{
 	m_Width = Width;
 	m_Height = Height;
 	m_ArraySize = DepthOrArraySize;
@@ -22,9 +34,9 @@ D3D12_RESOURCE_DESC PixelBuffer::DescribeTex2D( uint32_t Width, uint32_t Height,
 	D3D12_RESOURCE_DESC Desc = {};
 	Desc.Alignment = 0;
 	Desc.DepthOrArraySize = (UINT16)DepthOrArraySize;
-	Desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+	Desc.Dimension = Dimension;
 	Desc.Flags = (D3D12_RESOURCE_FLAGS)Flags;
-	Desc.Format = GetBaseFormat( Format );
+	Desc.Format = GetBaseFormat(Format);
 	Desc.Height = (UINT)Height;
 	Desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 	Desc.MipLevels = NumMips;
@@ -475,16 +487,12 @@ void DepthBuffer::CreateDerivedViews( ID3D12Device* Device, DXGI_FORMAT Format )
 //--------------------------------------------------------------------------------------
 // VolumeTexture
 //--------------------------------------------------------------------------------------
-VolumeTexture::VolumeTexture()
-	: m_Width( 0 ), m_Height( 0 ), m_Depth( 0 )
+void VolumeTexture::Create( const std::wstring& Name, uint32_t Width, uint32_t Height, uint32_t Depth,
+	uint32_t NumMips, DXGI_FORMAT Format, D3D12_GPU_VIRTUAL_ADDRESS VidMemPtr /* = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN */)
 {
-	m_SRVHandle.ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
-	m_UAVHandle.ptr = D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN;
-}
-
-void VolumeTexture::Create( const std::wstring& Name, uint32_t Width, uint32_t Height, uint32_t Depth, DXGI_FORMAT Format )
-{
-	D3D12_RESOURCE_DESC Desc = DescribeTex3D( Width, Height, Depth, Format );
+	NumMips = (NumMips == 0 ? ComputeNumMips(Width, Height) : NumMips);
+	D3D12_RESOURCE_DESC Desc = DescribeTex3D(Width, Height, Depth, NumMips, Format,
+		D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
 
 	D3D12_HEAP_PROPERTIES HeapProps;
 	HeapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -496,29 +504,12 @@ void VolumeTexture::Create( const std::wstring& Name, uint32_t Width, uint32_t H
 	HRESULT hr;
 	V( Graphics::g_device->CreateCommittedResource( &HeapProps, D3D12_HEAP_FLAG_NONE, &Desc,
 		D3D12_RESOURCE_STATE_COMMON, NULL, IID_PPV_ARGS( &m_pResource ) ) );
+#ifdef RELEASE
+	(Name);
+#else
+	m_pResource->SetName(Name.c_str());
+#endif
 	CreateDerivedViews();
-}
-
-D3D12_RESOURCE_DESC VolumeTexture::DescribeTex3D( uint32_t Width, uint32_t Height, uint32_t Depth, DXGI_FORMAT Format )
-{
-	m_Width = Width;
-	m_Height = Height;
-	m_Depth = Depth;
-	m_Format = Format;
-
-	D3D12_RESOURCE_DESC Desc = {};
-	Desc.Alignment = 0;
-	Desc.DepthOrArraySize = (UINT16)Depth;
-	Desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
-	Desc.Flags = (D3D12_RESOURCE_FLAGS)(D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-	Desc.Format = GetBaseFormat();
-	Desc.Height = (UINT)Height;
-	Desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	Desc.MipLevels = 1;
-	Desc.SampleDesc.Count = 1;
-	Desc.SampleDesc.Quality = 0;
-	Desc.Width = (UINT64)Width;
-	return Desc;
 }
 
 void VolumeTexture::CreateDerivedViews()
@@ -527,99 +518,12 @@ void VolumeTexture::CreateDerivedViews()
 	if (m_SRVHandle.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 		m_SRVHandle = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
 	Graphics::g_device->CreateShaderResourceView( Resource, nullptr, m_SRVHandle );
+	if (m_RTVHandle.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
+		m_RTVHandle = Graphics::g_pRTVDescriptorHeap->Append().GetCPUHandle();
+	Graphics::g_device->CreateRenderTargetView( Resource, nullptr, m_RTVHandle );
 	if (m_UAVHandle.ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
 		m_UAVHandle = Graphics::g_pCSUDescriptorHeap->Append().GetCPUHandle();
 	Graphics::g_device->CreateUnorderedAccessView( Resource, nullptr, nullptr, m_UAVHandle );
-}
-
-DXGI_FORMAT VolumeTexture::GetBaseFormat()
-{
-	switch (m_Format)
-	{
-	case DXGI_FORMAT_R8G8B8A8_UNORM:
-	case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
-		return DXGI_FORMAT_R8G8B8A8_TYPELESS;
-
-	case DXGI_FORMAT_B8G8R8A8_UNORM:
-	case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
-		return DXGI_FORMAT_B8G8R8A8_TYPELESS;
-
-	case DXGI_FORMAT_B8G8R8X8_UNORM:
-	case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
-		return DXGI_FORMAT_B8G8R8X8_TYPELESS;
-
-		// 32-bit Z w/ Stencil
-	case DXGI_FORMAT_R32G8X24_TYPELESS:
-	case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
-	case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS:
-	case DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:
-		return DXGI_FORMAT_R32G8X24_TYPELESS;
-
-		// No Stencil
-	case DXGI_FORMAT_R32_TYPELESS:
-	case DXGI_FORMAT_D32_FLOAT:
-	case DXGI_FORMAT_R32_FLOAT:
-		return DXGI_FORMAT_R32_TYPELESS;
-
-		// 24-bit Z
-	case DXGI_FORMAT_R24G8_TYPELESS:
-	case DXGI_FORMAT_D24_UNORM_S8_UINT:
-	case DXGI_FORMAT_R24_UNORM_X8_TYPELESS:
-	case DXGI_FORMAT_X24_TYPELESS_G8_UINT:
-		return DXGI_FORMAT_R24G8_TYPELESS;
-
-		// 16-bit Z w/o Stencil
-	case DXGI_FORMAT_R16_TYPELESS:
-	case DXGI_FORMAT_D16_UNORM:
-	case DXGI_FORMAT_R16_UNORM:
-		return DXGI_FORMAT_R16_TYPELESS;
-
-	default:
-		return m_Format;
-	}
-}
-
-DXGI_FORMAT VolumeTexture::GetUAVFormat()
-{
-	switch (m_Format)
-	{
-	case DXGI_FORMAT_R8G8B8A8_TYPELESS:
-	case DXGI_FORMAT_R8G8B8A8_UNORM:
-	case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
-		return DXGI_FORMAT_R8G8B8A8_UNORM;
-
-	case DXGI_FORMAT_B8G8R8A8_TYPELESS:
-	case DXGI_FORMAT_B8G8R8A8_UNORM:
-	case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
-		return DXGI_FORMAT_B8G8R8A8_UNORM;
-
-	case DXGI_FORMAT_B8G8R8X8_TYPELESS:
-	case DXGI_FORMAT_B8G8R8X8_UNORM:
-	case DXGI_FORMAT_B8G8R8X8_UNORM_SRGB:
-		return DXGI_FORMAT_B8G8R8X8_UNORM;
-
-	case DXGI_FORMAT_R32_TYPELESS:
-	case DXGI_FORMAT_R32_FLOAT:
-		return DXGI_FORMAT_R32_FLOAT;
-
-#ifdef _DEBUG
-	case DXGI_FORMAT_R32G8X24_TYPELESS:
-	case DXGI_FORMAT_D32_FLOAT_S8X24_UINT:
-	case DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS:
-	case DXGI_FORMAT_X32_TYPELESS_G8X24_UINT:
-	case DXGI_FORMAT_D32_FLOAT:
-	case DXGI_FORMAT_R24G8_TYPELESS:
-	case DXGI_FORMAT_D24_UNORM_S8_UINT:
-	case DXGI_FORMAT_R24_UNORM_X8_TYPELESS:
-	case DXGI_FORMAT_X24_TYPELESS_G8_UINT:
-	case DXGI_FORMAT_D16_UNORM:
-
-		PRINTWARN( "Requested a UAV format for a depth stencil format." );
-#endif
-
-	default:
-		return m_Format;
-	}
 }
 
 //--------------------------------------------------------------------------------------
