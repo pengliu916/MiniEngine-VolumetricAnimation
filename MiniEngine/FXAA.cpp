@@ -28,8 +28,8 @@ namespace FXAA
 	ColorBuffer g_LumaBuffer;
 	StructuredBuffer g_FXAAWorkQueueH;
 	StructuredBuffer g_FXAAWorkQueueV;
-	TypedBuffer g_FXAAColorQueueH( DXGI_FORMAT_R11G11B10_FLOAT );
-	TypedBuffer g_FXAAColorQueueV( DXGI_FORMAT_R11G11B10_FLOAT );
+	TypedBuffer g_FXAAColorQueueH;
+	TypedBuffer g_FXAAColorQueueV;
 	IndirectArgsBuffer IndirectParameters;
 
 	float ContrastThreeshold = 0.2f;
@@ -102,8 +102,10 @@ void FXAA::CreateResource()
 	IndirectParameters.Create( L"FXAA Indirect Parameters", 2, sizeof( D3D12_DISPATCH_ARGUMENTS ), initArgs );
 	g_FXAAWorkQueueH.Create( L"FXAA Horizontal Work Queue", 512 * 1024, 4 );
 	g_FXAAWorkQueueV.Create( L"FXAA Vertical Work Queue", 512 * 1024, 4 );
+	g_FXAAColorQueueH.SetFormat(DXGI_FORMAT_R11G11B10_FLOAT);
 	g_FXAAColorQueueH.Create( L"FXAA Horizontal Color Queue", 512 * 1024, 4 );
-	g_FXAAColorQueueV.Create( L"FXAA Vertical Color Queue", 512 * 1024, 4 );
+	g_FXAAColorQueueV.SetFormat(DXGI_FORMAT_R11G11B10_FLOAT);
+	g_FXAAColorQueueV.Create(L"FXAA Vertical Color Queue", 512 * 1024, 4);
 
 	Resize();
 }

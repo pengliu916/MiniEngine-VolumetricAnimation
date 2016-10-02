@@ -301,7 +301,7 @@ private:
 class TypedBuffer : public GpuBuffer
 {
 public:
-	TypedBuffer( DXGI_FORMAT Format ) : m_DataFormat( Format ) {}
+	void SetFormat( DXGI_FORMAT Format ) {m_DataFormat = Format;}
 	virtual void CreateDerivedViews( void ) override;
 
 protected:
