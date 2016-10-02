@@ -140,6 +140,9 @@
     <CustomBuild Include="SparseVolume_StepInfo_ps.hlsl" />
     <CustomBuild Include="SparseVolume_StepInfo_cs.hlsl" />
     <CustomBuild Include="SparseVolume_VolumeUpdate_cs.hlsl" />
+    <CustomBuild Include="SparseVolume_VolumeUpdate_gs.hlsl" />
+    <CustomBuild Include="SparseVolume_VolumeUpdate_ps.hlsl" />
+    <CustomBuild Include="SparseVolume_VolumeUpdate_vs.hlsl" />
     <CustomBuild Include="SparseVolume.hlsli" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

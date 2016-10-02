@@ -17,10 +17,6 @@ namespace {
     uint3 _submittedReso;
     uint3 _curReso;
 
-    GpuResource* _volumeResource;
-    D3D12_CPU_DESCRIPTOR_HANDLE _volumeUAV;
-    D3D12_CPU_DESCRIPTOR_HANDLE _volumeSRV;
-
     DXGI_FORMAT _stepInfoTexFormat = DXGI_FORMAT_R16G16_FLOAT;
 
     double _animateTime = 0.0;
@@ -28,6 +24,7 @@ namespace {
     bool _useStepInfoTex = false;
     bool _stepInfoDebug = false;
     bool _typedLoadSupported = false;
+    bool _usePSUpdate = false;
 
     // define the geometry for a triangle.
     XMFLOAT3 cubeVertices[] = {
@@ -129,8 +126,10 @@ SparseVolume::OnCreateResource()
 
     // Compile Shaders
     ComPtr<ID3DBlob> volUpdateCS[ManagedBuf::kNumType][kNumStruct];
-    ComPtr<ID3DBlob> cubeVS, stepInfoVS;
+    ComPtr<ID3DBlob> cubeVS, stepInfoVS, volUpdateVS;
+    ComPtr<ID3DBlob> volUpdateGS;
     ComPtr<ID3DBlob> raycastPS[ManagedBuf::kNumType][kNumStruct][kNumFilter];
+    ComPtr<ID3DBlob> volUpdatePS[ManagedBuf::kNumType][kNumStruct];
 
     uint32_t compileFlags = D3DCOMPILE_OPTIMIZATION_LEVEL3;
     D3D_SHADER_MACRO macro[] = {
@@ -148,6 +147,16 @@ SparseVolume::OnCreateResource()
         D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
         "vs_5_1", compileFlags, 0, &cubeVS));
 
+    V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
+        _T("SparseVolume_VolumeUpdate_vs.hlsl")).c_str(), macro,
+        D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
+        "vs_5_1", compileFlags, 0, &volUpdateVS));
+
+    V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
+        _T("SparseVolume_VolumeUpdate_gs.hlsl")).c_str(), macro,
+        D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
+        "gs_5_1", compileFlags, 0, &volUpdateGS));
+
     uint DefIdx;
     for (int j = 0; j < kNumStruct; ++j) {
         macro[5].Definition = j == kVoxel ? "0" : "1";
@@ -162,6 +171,10 @@ SparseVolume::OnCreateResource()
                 _T("SparseVolume_VolumeUpdate_cs.hlsl")).c_str(), macro,
                 D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
                 "cs_5_1", compileFlags, 0, &volUpdateCS[i][j]));
+            V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
+                _T("SparseVolume_VolumeUpdate_ps.hlsl")).c_str(), macro,
+                D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
+                "ps_5_1", compileFlags, 0, &volUpdatePS[i][j]));
             V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
                 _T("SparseVolume_RayCast_ps.hlsl")).c_str(), macro,
                 D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
@@ -196,8 +209,7 @@ SparseVolume::OnCreateResource()
     _rootsig.Finalize(L"SparseVolume",
         D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
         D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
-        D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
-        D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS);
+        D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS);
 
     // Define the vertex input layout.
     D3D12_INPUT_ELEMENT_DESC inputElementDescs[] = {
@@ -209,6 +221,7 @@ SparseVolume::OnCreateResource()
     // Create PSO for volume update and volume render
     DXGI_FORMAT ColorFormat = Graphics::g_SceneColorBuffer.GetFormat();
     DXGI_FORMAT DepthFormat = Graphics::g_SceneDepthBuffer.GetFormat();
+    DXGI_FORMAT Tex3DFormat = DXGI_FORMAT_R32G32B32A32_FLOAT;
     for (int k = 0; k < kNumStruct; ++k) {
         for (int i = 0; i < ManagedBuf::kNumType; ++i) {
             for (int j = 0; j < kNumFilter; ++j) {
@@ -237,6 +250,28 @@ SparseVolume::OnCreateResource()
                 volUpdateCS[i][k]->GetBufferPointer(),
                 volUpdateCS[i][k]->GetBufferSize());
             _cptUpdatePSO[i][k].Finalize();
+
+            _gfxUpdatePSO[i][k].SetRootSignature(_rootsig);
+            _gfxUpdatePSO[i][k].SetInputLayout(
+                _countof(inputElementDescs), inputElementDescs);
+            _gfxUpdatePSO[i][k].SetRasterizerState(
+                Graphics::g_RasterizerDefault);
+            _gfxUpdatePSO[i][k].SetBlendState(Graphics::g_BlendDisable);
+            _gfxUpdatePSO[i][k].SetDepthStencilState(
+                Graphics::g_DepthStateDisabled);
+            _gfxUpdatePSO[i][k].SetSampleMask(UINT_MAX);
+            _gfxUpdatePSO[i][k].SetPrimitiveTopologyType(
+                D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT);
+            _gfxUpdatePSO[i][k].SetRenderTargetFormats(
+                1, &Tex3DFormat , DXGI_FORMAT_UNKNOWN);
+            _gfxUpdatePSO[i][k].SetVertexShader(
+                volUpdateVS->GetBufferPointer(), volUpdateVS->GetBufferSize());
+            _gfxUpdatePSO[i][k].SetGeometryShader(
+                volUpdateGS->GetBufferPointer(), volUpdateGS->GetBufferSize());
+            _gfxUpdatePSO[i][k].SetPixelShader(
+                volUpdatePS[i][k]->GetBufferPointer(),
+                volUpdatePS[i][k]->GetBufferSize());
+            _gfxUpdatePSO[i][k].Finalize();
         }
     }
 
@@ -339,11 +374,10 @@ void
 SparseVolume::OnRender(CommandContext& cmdContext, const DirectX::XMMATRIX& wvp,
     const DirectX::XMMATRIX& mView, const DirectX::XMFLOAT4& eyePos)
 {
+    static bool usePS = _usePSUpdate;
     _UpdatePerFrameData(wvp, mView, eyePos);
     ManagedBuf::BufInterface vol = _volBuf.GetResource();
-    _volumeResource = vol.resource;
-    _volumeUAV = vol.UAV;
-    _volumeSRV = vol.SRV;
+
     const uint3& reso = _volBuf.GetReso();
     if (_IsResolutionChanged(reso, _curReso)) {
         _UpdateVolumeSettings(reso);
@@ -364,13 +398,15 @@ SparseVolume::OnRender(CommandContext& cmdContext, const DirectX::XMMATRIX& wvp,
             cptContext.TransitionResource(_flagVol,
                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         }
-        cptContext.TransitionResource(*_volumeResource,
-            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        _UpdateVolume(cptContext);
-        cptContext.BeginResourceTransition(*_volumeResource,
+        cmdContext.TransitionResource(*vol.resource,
+            usePS && vol.type == ManagedBuf::k3DTexBuffer
+            ? D3D12_RESOURCE_STATE_RENDER_TARGET
+            : D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        _UpdateVolume(cmdContext, vol, usePS);
+        cmdContext.BeginResourceTransition(*vol.resource,
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         if (_useStepInfoTex) {
-            cptContext.BeginResourceTransition(_flagVol,
+            cmdContext.BeginResourceTransition(_flagVol,
                 D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         }
     }
@@ -407,11 +443,14 @@ SparseVolume::OnRender(CommandContext& cmdContext, const DirectX::XMMATRIX& wvp,
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     }
     
-    gfxContext.TransitionResource(*_volumeResource,
+    gfxContext.TransitionResource(*vol.resource,
         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    _RenderVolume(gfxContext);
-    gfxContext.BeginResourceTransition(*_volumeResource,
-        D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+    _RenderVolume(gfxContext, vol);
+    usePS = _usePSUpdate;
+    gfxContext.BeginResourceTransition(*vol.resource,
+        usePS && vol.type == ManagedBuf::k3DTexBuffer
+        ? D3D12_RESOURCE_STATE_RENDER_TARGET
+        : D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     
     if (_useStepInfoTex) {
         if (_stepInfoDebug) {
@@ -433,6 +472,7 @@ SparseVolume::RenderGui()
         ImGui::Separator();
         ImGui::Checkbox("StepInfoTex", &_useStepInfoTex); ImGui::SameLine();
         ImGui::Checkbox("Debug", &_stepInfoDebug);
+        ImGui::Checkbox("Use PS Update", &_usePSUpdate);
         ImGui::Separator();
         static int iFilterType = (int)_filterType;
         ImGui::RadioButton("No Filter", &iFilterType, kNoFilter);
@@ -451,21 +491,33 @@ SparseVolume::RenderGui()
 
         ImGui::Separator();
         ImGui::Text("Buffer Settings:");
-        static int uBufferChoice = _volBuf.GetType();
-        ImGui::RadioButton("Use Typed Buffer", &uBufferChoice,
-            ManagedBuf::kTypedBuffer);
-        ImGui::RadioButton("Use Structured Buffer", &uBufferChoice,
-            ManagedBuf::kStructuredBuffer);
-        ImGui::RadioButton("Use Texture3D Buffer", &uBufferChoice,
-            ManagedBuf::k3DTexBuffer);
-        if (iFilterType > kLinearFilter &&
-            uBufferChoice != ManagedBuf::k3DTexBuffer) {
-            uBufferChoice = _volBuf.GetType();
+        static int uBufferBitChoice = _volBuf.GetBit();
+        static int uBufferTypeChoice = _volBuf.GetType();
+        ImGui::RadioButton("Use 16Bit Buffer", &uBufferBitChoice,
+            ManagedBuf::k16Bit); ImGui::SameLine();
+        ImGui::RadioButton("Use 32Bit Buffer", &uBufferBitChoice,
+            ManagedBuf::k32Bit);
+        if (uBufferTypeChoice == ManagedBuf::kStructuredBuffer) {
+            uBufferBitChoice = ManagedBuf::k32Bit;
         }
-        if (uBufferChoice != _volBuf.GetType() &&
+        ImGui::RadioButton("Use Typed Buffer", &uBufferTypeChoice,
+            ManagedBuf::kTypedBuffer);
+        ImGui::RadioButton("Use Structured Buffer", &uBufferTypeChoice,
+            ManagedBuf::kStructuredBuffer);
+        ImGui::RadioButton("Use Texture3D Buffer", &uBufferTypeChoice,
+            ManagedBuf::k3DTexBuffer);
+        if ((iFilterType > kLinearFilter &&
+            uBufferTypeChoice != ManagedBuf::k3DTexBuffer) ||
+            (uBufferTypeChoice == ManagedBuf::kStructuredBuffer &&
+            uBufferBitChoice == ManagedBuf::k16Bit)) {
+            uBufferTypeChoice = _volBuf.GetType();
+        }
+        if ((uBufferTypeChoice != _volBuf.GetType() ||
+            uBufferBitChoice != _volBuf.GetBit()) &&
             !_volBuf.ChangeResource(_volBuf.GetReso(),
-                (ManagedBuf::Type)uBufferChoice)) {
-                uBufferChoice = _volBuf.GetType();
+                (ManagedBuf::Type)uBufferTypeChoice,
+                (ManagedBuf::Bit)uBufferBitChoice)) {
+                uBufferTypeChoice = _volBuf.GetType();
         }
 
         ImGui::Separator();
@@ -501,8 +553,10 @@ SparseVolume::RenderGui()
         ImGui::RadioButton("128##Z", (int*)&uiReso.z, 128); ImGui::SameLine();
         ImGui::RadioButton("256##Z", (int*)&uiReso.z, 256); ImGui::SameLine();
         ImGui::RadioButton("384##Z", (int*)&uiReso.z, 384);
-        if (_IsResolutionChanged(uiReso, _submittedReso) &&
-            _volBuf.ChangeResource(uiReso, _volBuf.GetType())) {
+        if ((_IsResolutionChanged(uiReso, _submittedReso) ||
+            _volBuf.GetType() != uBufferTypeChoice) &&
+            _volBuf.ChangeResource(
+                uiReso, _volBuf.GetType(), ManagedBuf::k32Bit)) {
             PRINTINFO("Reso:%dx%dx%d", uiReso.x, uiReso.y, uiReso.z);
             _submittedReso = uiReso;
         } else {
@@ -519,7 +573,7 @@ SparseVolume::_CreateBrickVolume()
     _curReso = _volBuf.GetReso();
     const uint ratio=_volParam->uVoxelBrickRatio;
     _flagVol.Create(L"FlagVol", _curReso.x / ratio, _curReso.y / ratio,
-        _curReso.z / ratio, DXGI_FORMAT_R8_UINT);
+        _curReso.z / ratio, 1, DXGI_FORMAT_R8_UINT);
 }
 
 void
@@ -627,23 +681,48 @@ SparseVolume::_CleanBrickVolume(ComputeContext& cptContext)
 }
 
 void
-SparseVolume::_UpdateVolume(ComputeContext& cptContext)
+SparseVolume::_UpdateVolume(CommandContext& cmdCtx,
+    const ManagedBuf::BufInterface& buf, bool usePS)
 {
-    GPU_PROFILE(cptContext, L"Volume Updating");
+    GPU_PROFILE(cmdCtx, L"Volume Updating");
     VolumeStruct type = _useStepInfoTex ? kFlagVol : kVoxel;
-    cptContext.SetPipelineState(
-        _cptUpdatePSO[_volBuf.GetType()][type]);
-    cptContext.SetRootSignature(_rootsig);
-    cptContext.SetDynamicDescriptors(2, 0, 1, &_volumeUAV);
-    cptContext.SetDynamicConstantBufferView(
-        0, sizeof(_cbPerFrame), (void*)&_cbPerFrame);
-    cptContext.SetDynamicConstantBufferView(
-        1, sizeof(_cbPerCall), (void*)&_cbPerCall);
     const uint3 xyz = _volParam->u3VoxelReso;
-    cptContext.Dispatch3D(xyz.x, xyz.y, xyz.z, THREAD_X, THREAD_Y, THREAD_Z);
-    if (_useStepInfoTex) {
-        cptContext.BeginResourceTransition(_flagVol,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    if (usePS) {
+        GraphicsContext& gfxCtx = cmdCtx.GetGraphicsContext();
+        gfxCtx.TransitionResource(
+            *buf.dummyResource, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        gfxCtx.SetPipelineState(_gfxUpdatePSO[buf.type][type]);
+        gfxCtx.SetRootSignature(_rootsig);
+        gfxCtx.SetDynamicConstantBufferView(
+            0, sizeof(_cbPerFrame), (void*)&_cbPerFrame);
+        gfxCtx.SetDynamicConstantBufferView(
+            1, sizeof(_cbPerCall), (void*)&_cbPerCall);
+        gfxCtx.SetDynamicDescriptors(2, 1, 1, &_flagVol.GetUAV());
+        gfxCtx.SetDynamicDescriptors(2, 0, 1, &buf.UAV);
+        D3D12_VIEWPORT viewPort = {};
+        viewPort.Width = (FLOAT)xyz.x;
+        viewPort.Height = (FLOAT)xyz.y;
+        viewPort.MaxDepth = 1.f;
+        D3D12_RECT scisserRect = {};
+        scisserRect.right = (LONG)xyz.x;
+        scisserRect.bottom = (LONG)xyz.y;
+        gfxCtx.SetViewport(viewPort);
+        gfxCtx.SetScisor(scisserRect);
+        gfxCtx.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_POINTLIST);
+        gfxCtx.SetRenderTarget(buf.RTV);
+        gfxCtx.SetVertexBuffer(0, _cubeVB.VertexBufferView());
+        gfxCtx.Draw(xyz.z);
+    } else {
+        ComputeContext& cptCtx = cmdCtx.GetComputeContext();
+        cptCtx.SetPipelineState(_cptUpdatePSO[buf.type][type]);
+        cptCtx.SetRootSignature(_rootsig);
+        cptCtx.SetDynamicDescriptors(2, 0, 1, &buf.UAV);
+        cptCtx.SetDynamicDescriptors(2, 1, 1, &_flagVol.GetUAV());
+        cptCtx.SetDynamicConstantBufferView(
+            0, sizeof(_cbPerFrame), (void*)&_cbPerFrame);
+        cptCtx.SetDynamicConstantBufferView(
+            1, sizeof(_cbPerCall), (void*)&_cbPerCall);
+        cptCtx.Dispatch3D(xyz.x, xyz.y, xyz.z, THREAD_X, THREAD_Y, THREAD_Z);
     }
 }
 
@@ -664,14 +743,14 @@ SparseVolume::_RenderNearFar(GraphicsContext& gfxContext)
 }
 
 void
-SparseVolume::_RenderVolume(GraphicsContext& gfxContext)
+SparseVolume::_RenderVolume(GraphicsContext& gfxContext,
+    const ManagedBuf::BufInterface& buf)
 {
     GPU_PROFILE(gfxContext, L"Rendering");
     VolumeStruct type = _useStepInfoTex ? kFlagVol : kVoxel;
-    gfxContext.SetPipelineState(
-        _gfxRenderPSO[_volBuf.GetType()][type][_filterType]);
+    gfxContext.SetPipelineState(_gfxRenderPSO[buf.type][type][_filterType]);
     gfxContext.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-    gfxContext.SetDynamicDescriptors(3, 0, 1, &_volumeSRV);
+    gfxContext.SetDynamicDescriptors(3, 0, 1, &buf.SRV);
     if (_useStepInfoTex) {
         gfxContext.SetDynamicDescriptors(3, 1, 1, &_stepInfoTex.GetSRV());
     }

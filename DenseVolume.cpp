@@ -168,6 +168,7 @@ void DenseVolume::OnCreateResource()
     uint32_t volumeBufferElementCount =
         _currentDepth*_currentHeight*_currentWidth;
     if (_currentBufferType == kTypedBuffer) {
+        _typedVolumeBuffer[_onStageIndex].SetFormat(DXGI_FORMAT_R8G8B8A8_UINT);
         _typedVolumeBuffer[_onStageIndex].Create(L"Typed Volume Buf",
             volumeBufferElementCount, 4 * sizeof(uint8_t));
     } else {
@@ -419,6 +420,8 @@ void DenseVolume::CookVolume(uint32_t Width, uint32_t Height, uint32_t Depth,
     });
 
     if (BufType == kTypedBuffer) {
+        _typedVolumeBuffer[1 - _onStageIndex].SetFormat(
+            DXGI_FORMAT_R11G11B10_FLOAT);
         _typedVolumeBuffer[1 - _onStageIndex].Create(L"Typed Volume Buffer",
             BufferElmCount, 4 * sizeof(uint8_t), pBufPtr);
     }

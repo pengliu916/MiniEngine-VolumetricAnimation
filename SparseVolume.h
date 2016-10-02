@@ -46,8 +46,10 @@ private:
     void _UpdateVolumeSettings(const uint3 reso);
     // Render subroutine
     void _CleanBrickVolume(ComputeContext& cptContext);
-    void _UpdateVolume(ComputeContext& cptContext);
-    void _RenderVolume(GraphicsContext& gfxContext);
+    void _UpdateVolume(CommandContext& cmdContext,
+        const ManagedBuf::BufInterface& buf, bool usePS);
+    void _RenderVolume(GraphicsContext& gfxContext,
+        const ManagedBuf::BufInterface& buf);
     void _RenderNearFar(GraphicsContext& gfxContext);
     void _RenderBrickGrid(GraphicsContext& gfxContext);
 
@@ -57,6 +59,7 @@ private:
 
     RootSignature _rootsig;
     ComputePSO _cptUpdatePSO[ManagedBuf::kNumType][kNumStruct];
+    GraphicsPSO _gfxUpdatePSO[ManagedBuf::kNumType][kNumStruct];
     GraphicsPSO _gfxRenderPSO[ManagedBuf::kNumType][kNumStruct][kNumFilter];
     GraphicsPSO _gfxStepInfoPSO;
     GraphicsPSO _gfxStepInfoDebugPSO;

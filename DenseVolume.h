@@ -52,8 +52,7 @@ private:
     RootSignature _rootsignature;
 
     StructuredBuffer _structuredVolumeBuffer[2];
-    TypedBuffer _typedVolumeBuffer[2] = 
-        {DXGI_FORMAT_R8G8B8A8_UINT,DXGI_FORMAT_R8G8B8A8_UINT};
+    TypedBuffer _typedVolumeBuffer[2];
 
     StructuredBuffer _vertexBuffer;
     ByteAddressBuffer _indexBuffer;
