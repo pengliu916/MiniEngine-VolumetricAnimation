@@ -14,6 +14,7 @@
 #pragma warning(disable: 4996)
 
 #define STRINGIFY(x) #x
+#define STRINGIFY_BUILTIN(x) STRINGIFY(x)
 #define __FILENAME__ (wcsrchr (_T(__FILE__), L'\\') ? wcsrchr (_T(__FILE__), L'\\') + 1 : _T(__FILE__))
 
 #define ARRAY_COUNT(X) (sizeof(X)/sizeof((X)[0]))
@@ -139,7 +140,7 @@ inline HRESULT Trace( const wchar_t* strFile, DWORD dwLine, HRESULT hr, const wc
 #else
 #define ASSERT(isTrue) \
 	if(!(bool)(isTrue)){ \
-		PRINTERROR("Assertion failed in" STRINGIFY(__FILENAME__) " @ " STRINGIFY(__LINE__)"\n \t \'"#isTrue"\' is false."); \
+		PRINTERROR("Assertion failed in" STRINGIFY_BUILTIN(__FILE__) " @ " STRINGIFY_BUILTIN(__LINE__)"\n \t \'"#isTrue"\' is false."); \
 		__debugbreak(); \
 	}
 #endif
