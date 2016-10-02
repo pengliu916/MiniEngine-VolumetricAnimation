@@ -570,16 +570,35 @@ namespace Graphics
 			ImGui::Text( "Created" ); ImGui::NextColumn();
 			ImGui::Text( "Ready" ); ImGui::NextColumn();
 			ImGui::Separator();
-			const char* name[4] = {"Direct", "Bundle", "Compute", "Copy"};
+			const static char* cmdAllocatorName[4] = {"Direct", "Bundle", "Compute", "Copy"};
 			for (int i = 0; i < 4; ++i)
 			{
 				//ImGui::NextColumn();
-				ImGui::Text( name[i] ); ImGui::NextColumn();
+				ImGui::Text(cmdAllocatorName[i] ); ImGui::NextColumn();
 				ImGui::Text( "%d", Graphics::g_stats.allocatorCreated[i] ); ImGui::NextColumn();
 				ImGui::Text( "%d", Graphics::g_stats.allocatorReady[i] ); ImGui::NextColumn();
 			}
 			ImGui::Columns( 1 );
 			ImGui::Separator();
+
+			ImGui::Columns(2, "DescriptorHandle Size");
+			ImGui::Separator();
+			ImGui::Text("Descriptor Type"); ImGui::NextColumn();
+			ImGui::Text("Count"); ImGui::NextColumn();
+			ImGui::Separator();
+
+			ImGui::Text("RTVDescriptor"); ImGui::NextColumn();
+			ImGui::Text("%d", Graphics::g_pRTVDescriptorHeap->Size()); ImGui::NextColumn();
+			ImGui::Text("DSVDescriptor"); ImGui::NextColumn();
+			ImGui::Text("%d", Graphics::g_pDSVDescriptorHeap->Size()); ImGui::NextColumn();
+			ImGui::Text("SMPDescriptor"); ImGui::NextColumn();
+			ImGui::Text("%d", Graphics::g_pSMPDescriptorHeap->Size()); ImGui::NextColumn();
+			ImGui::Text("CSUDescriptor"); ImGui::NextColumn();
+			ImGui::Text("%d", Graphics::g_pCSUDescriptorHeap->Size()); ImGui::NextColumn();
+
+			ImGui::Columns(1);
+			ImGui::Separator();
+
 			ImGui::Text( "RenderThread Stall Count: %d/frame  Time:%4.2fms", Graphics::g_stats.cpuStallCountPerFrame, Graphics::g_stats.cpuStallTimePerFrame );
 			Graphics::g_stats.cpuStallCountPerFrame = 0;
 			Graphics::g_stats.cpuStallTimePerFrame = 0;
