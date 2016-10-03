@@ -3,7 +3,7 @@
 #include "SparseVolume.inl"
 class SparseVolume
 {
-protected:
+public:
     enum VolumeStruct {
         kVoxel = 0,
         kFlagVol,
@@ -26,20 +26,17 @@ protected:
         DirectX::XMFLOAT4 f4Color; // color
     };
 
-public:
     SparseVolume();
     void OnCreateResource();
     void OnResize();
+    void OnUpdate();
     void OnRender(CommandContext& cmdContext, const DirectX::XMMATRIX& wvp,
         const DirectX::XMMATRIX& mView, const DirectX::XMFLOAT4& eyePos);
     void RenderGui();
 
 private:
     void _AddBall();
-    void _CreateBrickVolume();
-    inline bool _IsResolutionChanged(const uint3& a, const uint3& b) {
-        return a.x != b.x || a.y != b.y || a.z != b.z;
-    }
+    void _CreateBrickVolume(const uint3& reso, const uint ratio);
     // Data update
     void _UpdatePerFrameData(const DirectX::XMMATRIX& wvp,
         const DirectX::XMMATRIX& mView,const DirectX::XMFLOAT4& eyePos);
@@ -56,22 +53,32 @@ private:
     // Volume settings currently in use
     VolumeStruct _curVolStruct = kVoxel;
     FilterType _filterType = kNoFilter;
+    uint3 _curReso;
+    // new vol reso setting sent to ManagedBuf _volBuf
+    uint3 _submittedReso;
 
-    RootSignature _rootsig;
-    ComputePSO _cptUpdatePSO[ManagedBuf::kNumType][kNumStruct];
-    GraphicsPSO _gfxUpdatePSO[ManagedBuf::kNumType][kNumStruct];
-    GraphicsPSO _gfxRenderPSO[ManagedBuf::kNumType][kNumStruct][kNumFilter];
-    GraphicsPSO _gfxStepInfoPSO;
-    GraphicsPSO _gfxStepInfoDebugPSO;
-    ComputePSO _cptFlagVolResetPSO;
-
+    // per instance buffer resource
     ManagedBuf _volBuf;
     VolumeTexture _flagVol;
     ColorBuffer _stepInfoTex;
-    StructuredBuffer _cubeVB;
-    ByteAddressBuffer _cubeTriangleStripIB;
-    ByteAddressBuffer _cubeLineStripIB;
+    PerFrameDataCB _cbPerFrame;
+    PerCallDataCB _cbPerCall;
+    // point to vol data section in _cbPerCall
+    VolumeParam* _volParam;
+
+    // pointers/handlers currently available
+    ManagedBuf::BufInterface _curBufInterface;
 
     // info. to control volume update, processed by cpu
     std::vector<Ball> _ballsData;
+
+
+    // available ratios for current volume resolution
+    std::vector<uint16_t> _ratios;
+    // current selected ratio idx
+    uint _ratioIdx;
+
+    double _animateTime = 0.0;
+    bool _isAnimated = true;
+    bool _needVolumeRebuild = true;
 };

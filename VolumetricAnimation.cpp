@@ -64,6 +64,7 @@ void VolumetricAnimation::OnUpdate()
         ImGui::RadioButton("DenseVolume", &m_CurVolType, kDenseVolume);
         switch (m_CurVolType) {
             case kSparseVolume:
+                m_SparseVolume.OnUpdate();
                 m_SparseVolume.RenderGui(); break;
             case  kDenseVolume:
                 m_DenseVolume.RenderGui(); break;

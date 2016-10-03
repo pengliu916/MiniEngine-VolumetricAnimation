@@ -7,40 +7,41 @@ using namespace std;
 
 #define frand() ((float)rand()/RAND_MAX)
 namespace {
-    PerFrameDataCB _cbPerFrame;
-    PerCallDataCB _cbPerCall;
-    VolumeParam* _volParam;
-    // available ratios for current volume resolution
-    std::vector<uint16_t> _ratios;
-    // current selected ratio idx
-    uint _ratioIdx;
-    uint3 _submittedReso;
-    uint3 _curReso;
+    const DXGI_FORMAT _stepInfoTexFormat = DXGI_FORMAT_R16G16_FLOAT;
+    bool _typedLoadSupported = false;
 
-    DXGI_FORMAT _stepInfoTexFormat = DXGI_FORMAT_R16G16_FLOAT;
-
-    double _animateTime = 0.0;
-    bool _isAnimated = true;
     bool _useStepInfoTex = false;
     bool _stepInfoDebug = false;
-    bool _typedLoadSupported = false;
     bool _usePSUpdate = false;
 
     // define the geometry for a triangle.
-    XMFLOAT3 cubeVertices[] = {
+    const XMFLOAT3 cubeVertices[] = {
         {XMFLOAT3(-0.5f, -0.5f, -0.5f)},{XMFLOAT3(-0.5f, -0.5f,  0.5f)},
         {XMFLOAT3(-0.5f,  0.5f, -0.5f)},{XMFLOAT3(-0.5f,  0.5f,  0.5f)},
         {XMFLOAT3(0.5f, -0.5f, -0.5f)},{XMFLOAT3(0.5f, -0.5f,  0.5f)},
         {XMFLOAT3(0.5f,  0.5f, -0.5f)},{XMFLOAT3(0.5f,  0.5f,  0.5f)},
     };
     // the index buffer for triangle strip
-    uint16_t cubeTrianglesStripIndices[CUBE_TRIANGLESTRIP_LENGTH] = {
+    const uint16_t cubeTrianglesStripIndices[CUBE_TRIANGLESTRIP_LENGTH] = {
         6, 4, 2, 0, 1, 4, 5, 7, 1, 3, 2, 7, 6, 4
     };
     // the index buffer for cube wire frame (0xffff is the cut value set later)
-    uint16_t cubeLineStripIndices[CUBE_LINESTRIP_LENGTH] = {
+    const uint16_t cubeLineStripIndices[CUBE_LINESTRIP_LENGTH] = {
         0, 1, 5, 4, 0, 2, 3, 7, 6, 2, 0xffff, 6, 4, 0xffff, 7, 5, 0xffff, 3, 1
     };
+
+    std::once_flag _psoCompiled_flag;
+    RootSignature _rootsig;
+    ComputePSO _cptUpdatePSO[ManagedBuf::kNumType][SparseVolume::kNumStruct];
+    GraphicsPSO _gfxUpdatePSO[ManagedBuf::kNumType][SparseVolume::kNumStruct];
+    GraphicsPSO _gfxRenderPSO[ManagedBuf::kNumType]
+        [SparseVolume::kNumStruct][SparseVolume::kNumFilter];
+    GraphicsPSO _gfxStepInfoPSO;
+    GraphicsPSO _gfxStepInfoDebugPSO;
+    ComputePSO _cptFlagVolResetPSO;
+    StructuredBuffer _cubeVB;
+    ByteAddressBuffer _cubeTriangleStripIB;
+    ByteAddressBuffer _cubeLineStripIB;
 
     BOOLEAN GetBaseAndPower2(uint16_t input, uint16_t& base, uint16_t& power2)
     {
@@ -51,16 +52,277 @@ namespace {
         return isZero;
     }
 
-    void _BuildBrickRatioVector(uint16_t minDimension)
+    void _BuildBrickRatioVector(uint16_t minDimension,
+        std::vector<uint16_t>& ratios)
     {
         uint16_t base, power2;
         GetBaseAndPower2(minDimension, base, power2);
         ASSERT(power2 > 3);
-        _ratios.clear();
+        ratios.clear();
         for (uint16_t i = base == 1 ? 1 : 0;
             i < (base == 1 ? power2 - 1 : power2); ++i) {
-            _ratios.push_back(1 << i);
+            ratios.push_back(1 << i);
         }
+    }
+
+    inline bool _IsResolutionChanged(const uint3& a, const uint3& b)
+    {
+        return a.x != b.x || a.y != b.y || a.z != b.z;
+    }
+
+    inline HRESULT _Compile(LPCWSTR fileName, LPCSTR target,
+        const D3D_SHADER_MACRO* macro, ID3DBlob** bolb)
+    {
+        return Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
+            fileName).c_str(), macro,
+            D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
+            target, D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, bolb);
+    }
+
+    void _CreatePSOs()
+    {
+        HRESULT hr;
+        // Feature support checking
+        D3D12_FEATURE_DATA_D3D12_OPTIONS FeatureData = {};
+        V(Graphics::g_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS,
+            &FeatureData, sizeof(FeatureData)));
+        if (SUCCEEDED(hr)) {
+            if (FeatureData.TypedUAVLoadAdditionalFormats) {
+                D3D12_FEATURE_DATA_FORMAT_SUPPORT FormatSupport =
+                {DXGI_FORMAT_R8G8B8A8_UINT,D3D12_FORMAT_SUPPORT1_NONE,
+                    D3D12_FORMAT_SUPPORT2_NONE};
+                V(Graphics::g_device->CheckFeatureSupport(
+                    D3D12_FEATURE_FORMAT_SUPPORT, &FormatSupport,
+                    sizeof(FormatSupport)));
+                if (FAILED(hr)) {
+                    PRINTERROR("Checking Feature Support Failed");
+                }
+                if ((FormatSupport.Support2 &
+                    D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD) != 0) {
+                    _typedLoadSupported = true;
+                    PRINTINFO("Typed load is supported");
+                } else {
+                    PRINTWARN("Typed load is not supported");
+                }
+            } else {
+                PRINTWARN("TypedLoad AdditionalFormats load is not supported");
+            }
+        }
+
+        // Compile Shaders
+        ComPtr<ID3DBlob>
+            volUpdateCS[ManagedBuf::kNumType][SparseVolume::kNumStruct];
+        ComPtr<ID3DBlob> cubeVS, stepInfoVS, volUpdateVS;
+        ComPtr<ID3DBlob> volUpdateGS;
+        ComPtr<ID3DBlob> raycastPS[ManagedBuf::kNumType]
+            [SparseVolume::kNumStruct][SparseVolume::kNumFilter];
+        ComPtr<ID3DBlob>
+            volUpdatePS[ManagedBuf::kNumType][SparseVolume::kNumStruct];
+
+        D3D_SHADER_MACRO macro[] = {
+            {"__hlsl", "1"},//0
+            {"TYPED_UAV", "0"},//1
+            {"STRUCT_UAV", "0"},//2
+            {"TEX3D_UAV", "0"},//3
+            {"FILTER_READ", "0"},//4
+            {"ENABLE_BRICKS", "0"},//5
+            {nullptr, nullptr}
+        };
+
+        V(_Compile(L"SparseVolume_RayCast_vs.hlsl", "vs_5_1", macro, &cubeVS));
+        V(_Compile(L"SparseVolume_VolumeUpdate_vs.hlsl", "vs_5_1",
+            macro,&volUpdateVS));
+        V(_Compile(L"SparseVolume_VolumeUpdate_gs.hlsl", "gs_5_1",
+            macro,&volUpdateGS));
+
+        uint DefIdx;
+        for (int j = 0; j < SparseVolume::kNumStruct; ++j) {
+            macro[5].Definition = j == SparseVolume::kVoxel ? "0" : "1";
+            for (int i = 0; i < ManagedBuf::kNumType; ++i) {
+                switch ((ManagedBuf::Type)i) {
+                case ManagedBuf::kStructuredBuffer: DefIdx = 2; break;
+                case ManagedBuf::kTypedBuffer: DefIdx = 1; break;
+                case ManagedBuf::k3DTexBuffer: DefIdx = 3; break;
+                }
+                macro[DefIdx].Definition = "1";
+                V(_Compile(L"SparseVolume_VolumeUpdate_cs.hlsl", "cs_5_1",
+                    macro, &volUpdateCS[i][j]));
+                V(_Compile(L"SparseVolume_VolumeUpdate_ps.hlsl", "ps_5_1",
+                    macro, &volUpdatePS[i][j]));
+                V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1",
+                    macro, &raycastPS[i][j][SparseVolume::kNoFilter]));
+                macro[4].Definition = "1"; // FILTER_READ
+                V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1",
+                    macro, &raycastPS[i][j][SparseVolume::kLinearFilter]));
+                macro[4].Definition = "2"; // FILTER_READ
+                V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1",
+                    macro, &raycastPS[i][j][SparseVolume::kSamplerLinear]));
+                macro[4].Definition = "3"; // FILTER_READ
+                V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1",
+                    macro, &raycastPS[i][j][SparseVolume::kSamplerAniso]));
+                macro[4].Definition = "0"; // FILTER_READ
+                macro[DefIdx].Definition = "0";
+            }
+        }
+        // Create Rootsignature
+        _rootsig.Reset(4, 2);
+        _rootsig.InitStaticSampler(0, Graphics::g_SamplerLinearClampDesc);
+        _rootsig.InitStaticSampler(1, Graphics::g_SamplerAnisoWrapDesc);
+        _rootsig[0].InitAsConstantBuffer(0);
+        _rootsig[1].InitAsConstantBuffer(1);
+        _rootsig[2].InitAsDescriptorRange(
+            D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 2);
+        _rootsig[3].InitAsDescriptorRange(
+            D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 2);
+        _rootsig.Finalize(L"SparseVolume",
+            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
+            D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
+            D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS);
+
+        // Define the vertex input layout.
+        D3D12_INPUT_ELEMENT_DESC inputElementDescs[] = {
+            {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
+            D3D12_APPEND_ALIGNED_ELEMENT,
+            D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}
+        };
+
+        // Create PSO for volume update and volume render
+        DXGI_FORMAT ColorFormat = Graphics::g_SceneColorBuffer.GetFormat();
+        DXGI_FORMAT DepthFormat = Graphics::g_SceneDepthBuffer.GetFormat();
+        DXGI_FORMAT Tex3DFormat = DXGI_FORMAT_R32G32B32A32_FLOAT;
+        for (int k = 0; k < SparseVolume::kNumStruct; ++k) {
+            for (int i = 0; i < ManagedBuf::kNumType; ++i) {
+                for (int j = 0; j < SparseVolume::kNumFilter; ++j) {
+                    _gfxRenderPSO[i][k][j].SetRootSignature(_rootsig);
+                    _gfxRenderPSO[i][k][j].SetInputLayout(
+                        _countof(inputElementDescs), inputElementDescs);
+                    _gfxRenderPSO[i][k][j].SetRasterizerState(
+                        Graphics::g_RasterizerDefault);
+                    _gfxRenderPSO[i][k][j].SetBlendState(
+                        Graphics::g_BlendDisable);
+                    _gfxRenderPSO[i][k][j].SetDepthStencilState(
+                        Graphics::g_DepthStateReadWrite);
+                    _gfxRenderPSO[i][k][j].SetSampleMask(UINT_MAX);
+                    _gfxRenderPSO[i][k][j].SetPrimitiveTopologyType(
+                        D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
+                    _gfxRenderPSO[i][k][j].SetRenderTargetFormats(
+                        1, &ColorFormat, DepthFormat);
+                    _gfxRenderPSO[i][k][j].SetVertexShader(
+                        cubeVS->GetBufferPointer(), cubeVS->GetBufferSize());
+                    _gfxRenderPSO[i][k][j].SetPixelShader(
+                        raycastPS[i][k][j]->GetBufferPointer(),
+                        raycastPS[i][k][j]->GetBufferSize());
+                    _gfxRenderPSO[i][k][j].Finalize();
+                }
+                _cptUpdatePSO[i][k].SetRootSignature(_rootsig);
+                _cptUpdatePSO[i][k].SetComputeShader(
+                    volUpdateCS[i][k]->GetBufferPointer(),
+                    volUpdateCS[i][k]->GetBufferSize());
+                _cptUpdatePSO[i][k].Finalize();
+
+                _gfxUpdatePSO[i][k].SetRootSignature(_rootsig);
+                _gfxUpdatePSO[i][k].SetInputLayout(
+                    _countof(inputElementDescs), inputElementDescs);
+                _gfxUpdatePSO[i][k].SetRasterizerState(
+                    Graphics::g_RasterizerDefault);
+                _gfxUpdatePSO[i][k].SetBlendState(Graphics::g_BlendDisable);
+                _gfxUpdatePSO[i][k].SetDepthStencilState(
+                    Graphics::g_DepthStateDisabled);
+                _gfxUpdatePSO[i][k].SetSampleMask(UINT_MAX);
+                _gfxUpdatePSO[i][k].SetPrimitiveTopologyType(
+                    D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT);
+                _gfxUpdatePSO[i][k].SetRenderTargetFormats(
+                    1, &Tex3DFormat, DXGI_FORMAT_UNKNOWN);
+                _gfxUpdatePSO[i][k].SetVertexShader(
+                    volUpdateVS->GetBufferPointer(),
+                    volUpdateVS->GetBufferSize());
+                _gfxUpdatePSO[i][k].SetGeometryShader(
+                    volUpdateGS->GetBufferPointer(),
+                    volUpdateGS->GetBufferSize());
+                _gfxUpdatePSO[i][k].SetPixelShader(
+                    volUpdatePS[i][k]->GetBufferPointer(),
+                    volUpdatePS[i][k]->GetBufferSize());
+                _gfxUpdatePSO[i][k].Finalize();
+            }
+        }
+
+        // Create PSO for render near far plane
+        ComPtr<ID3DBlob> stepInfoPS, stepInfoDebugPS, resetCS;
+        D3D_SHADER_MACRO macro1[] = {
+            {"__hlsl", "1"},
+            {"DEBUG_VIEW", "0"},
+            {nullptr, nullptr}
+        };
+        V(_Compile(L"SparseVolume_StepInfo_cs.hlsl", "cs_5_1",
+            macro1, &resetCS));
+        V(_Compile(L"SparseVolume_StepInfo_ps.hlsl", "ps_5_1",
+            macro1, &stepInfoPS));
+        V(_Compile(L"SparseVolume_StepInfo_vs.hlsl", "vs_5_1",
+            macro1, &stepInfoVS));
+        macro[1].Definition = "1";
+        V(_Compile(L"SparseVolume_StepInfo_ps.hlsl", "ps_5_1",
+            macro1, &stepInfoDebugPS));
+
+        // Create PSO for clean brick volume
+        _cptFlagVolResetPSO.SetRootSignature(_rootsig);
+        _cptFlagVolResetPSO.SetComputeShader(
+            resetCS->GetBufferPointer(), resetCS->GetBufferSize());
+        _cptFlagVolResetPSO.Finalize();
+
+        _gfxStepInfoPSO.SetRootSignature(_rootsig);
+        _gfxStepInfoPSO.SetPrimitiveRestart(
+            D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFF);
+        _gfxStepInfoPSO.SetInputLayout(
+            _countof(inputElementDescs), inputElementDescs);
+        _gfxStepInfoPSO.SetDepthStencilState(Graphics::g_DepthStateDisabled);
+        _gfxStepInfoPSO.SetSampleMask(UINT_MAX);
+        _gfxStepInfoPSO.SetVertexShader(
+            stepInfoVS->GetBufferPointer(), stepInfoVS->GetBufferSize());
+        _gfxStepInfoDebugPSO = _gfxStepInfoPSO;
+        _gfxStepInfoPSO.SetRasterizerState(Graphics::g_RasterizerTwoSided);
+        D3D12_RASTERIZER_DESC rastDesc = Graphics::g_RasterizerTwoSided;
+        rastDesc.FillMode = D3D12_FILL_MODE_WIREFRAME;
+        _gfxStepInfoDebugPSO.SetRasterizerState(rastDesc);
+        _gfxStepInfoDebugPSO.SetBlendState(Graphics::g_BlendDisable);
+        D3D12_BLEND_DESC blendDesc = {};
+        blendDesc.AlphaToCoverageEnable = false;
+        blendDesc.IndependentBlendEnable = false;
+        blendDesc.RenderTarget[0].BlendEnable = true;
+        blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_MIN;
+        blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
+        blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+        blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_MAX;
+        blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+        blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ONE;
+        blendDesc.RenderTarget[0].RenderTargetWriteMask =
+            D3D12_COLOR_WRITE_ENABLE_RED | D3D12_COLOR_WRITE_ENABLE_GREEN;
+        _gfxStepInfoPSO.SetBlendState(blendDesc);
+        _gfxStepInfoPSO.SetPrimitiveTopologyType(
+            D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
+        _gfxStepInfoDebugPSO.SetPrimitiveTopologyType(
+            D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE);
+        _gfxStepInfoDebugPSO.SetRenderTargetFormats(
+            1, &ColorFormat, DepthFormat);
+        _gfxStepInfoPSO.SetRenderTargetFormats(
+            1, &_stepInfoTexFormat, DXGI_FORMAT_UNKNOWN);
+        _gfxStepInfoPSO.SetPixelShader(
+            stepInfoPS->GetBufferPointer(), stepInfoPS->GetBufferSize());
+        _gfxStepInfoDebugPSO.SetPixelShader(
+            stepInfoPS->GetBufferPointer(), stepInfoDebugPS->GetBufferSize());
+        _gfxStepInfoPSO.Finalize();
+        _gfxStepInfoDebugPSO.Finalize();
+
+        const uint32_t vertexBufferSize = sizeof(cubeVertices);
+        _cubeVB.Create(L"Vertex Buffer", ARRAYSIZE(cubeVertices),
+            sizeof(XMFLOAT3), (void*)cubeVertices);
+
+        _cubeTriangleStripIB.Create(L"Cube TriangleStrip Index Buffer",
+            ARRAYSIZE(cubeTrianglesStripIndices), sizeof(uint16_t),
+            (void*)cubeTrianglesStripIndices);
+
+        _cubeLineStripIB.Create(L"Cube LineStrip Index Buffer",
+            ARRAYSIZE(cubeLineStripIndices), sizeof(uint16_t),
+            (void*)cubeLineStripIndices);
     }
 }
 
@@ -79,286 +341,24 @@ SparseVolume::SparseVolume()
 void
 SparseVolume::OnCreateResource()
 {
-    HRESULT hr;
     ASSERT(Graphics::g_device);
     // Create resource for volume
     _volBuf.CreateResource();
+
     const uint3 reso = _volBuf.GetReso();
-    _UpdateVolumeSettings(reso);
     _submittedReso = reso;
+    _UpdateVolumeSettings(reso);
     _ratioIdx = (uint)(_ratios.size() - 2);
     _volParam->uVoxelBrickRatio = _ratios[_ratioIdx];
-
+    
     // Create Spacial Structure Buffer
-    _CreateBrickVolume();
+    _CreateBrickVolume(reso, _ratios[_ratioIdx]);
 
     for (int i = 0; i < MAX_BALLS; ++i) {
         _AddBall();
     }
 
-    // Feature support checking
-    D3D12_FEATURE_DATA_D3D12_OPTIONS FeatureData = {};
-    V(Graphics::g_device->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS,
-        &FeatureData, sizeof(FeatureData)));
-    if (SUCCEEDED(hr)) {
-        if (FeatureData.TypedUAVLoadAdditionalFormats) {
-            D3D12_FEATURE_DATA_FORMAT_SUPPORT FormatSupport =
-            {DXGI_FORMAT_R8G8B8A8_UINT,D3D12_FORMAT_SUPPORT1_NONE,
-                D3D12_FORMAT_SUPPORT2_NONE};
-            V(Graphics::g_device->CheckFeatureSupport(
-                D3D12_FEATURE_FORMAT_SUPPORT, &FormatSupport,
-                sizeof(FormatSupport)));
-            if (FAILED(hr)) {
-                PRINTERROR("Checking Feature Support Failed");
-            }
-            if ((FormatSupport.Support2 &
-                D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD) != 0) {
-                _typedLoadSupported = true;
-                PRINTINFO("DXGI_FORMAT_R8G8B8A8_UINT typed load is supported");
-            } else {
-                PRINTWARN(
-                    "DXGI_FORMAT_R8G8B8A8_UINT typed load is not supported");
-            }
-        } else {
-            PRINTWARN("TypedUAVLoadAdditionalFormats load is not supported");
-        }
-    }
-
-    // Compile Shaders
-    ComPtr<ID3DBlob> volUpdateCS[ManagedBuf::kNumType][kNumStruct];
-    ComPtr<ID3DBlob> cubeVS, stepInfoVS, volUpdateVS;
-    ComPtr<ID3DBlob> volUpdateGS;
-    ComPtr<ID3DBlob> raycastPS[ManagedBuf::kNumType][kNumStruct][kNumFilter];
-    ComPtr<ID3DBlob> volUpdatePS[ManagedBuf::kNumType][kNumStruct];
-
-    uint32_t compileFlags = D3DCOMPILE_OPTIMIZATION_LEVEL3;
-    D3D_SHADER_MACRO macro[] = {
-        {"__hlsl", "1"},//0
-        {"TYPED_UAV", "0"},//1
-        {"STRUCT_UAV", "0"},//2
-        {"TEX3D_UAV", "0"},//3
-        {"FILTER_READ", "0"},//4
-        {"ENABLE_BRICKS", "0"},//5
-        {nullptr, nullptr}
-    };
-
-    V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-        _T("SparseVolume_RayCast_vs.hlsl")).c_str(), macro,
-        D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
-        "vs_5_1", compileFlags, 0, &cubeVS));
-
-    V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-        _T("SparseVolume_VolumeUpdate_vs.hlsl")).c_str(), macro,
-        D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
-        "vs_5_1", compileFlags, 0, &volUpdateVS));
-
-    V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-        _T("SparseVolume_VolumeUpdate_gs.hlsl")).c_str(), macro,
-        D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
-        "gs_5_1", compileFlags, 0, &volUpdateGS));
-
-    uint DefIdx;
-    for (int j = 0; j < kNumStruct; ++j) {
-        macro[5].Definition = j == kVoxel ? "0" : "1";
-        for (int i = 0; i < ManagedBuf::kNumType; ++i) {
-            switch ((ManagedBuf::Type)i) {
-            case ManagedBuf::kStructuredBuffer: DefIdx = 2; break;
-            case ManagedBuf::kTypedBuffer: DefIdx = 1; break;
-            case ManagedBuf::k3DTexBuffer: DefIdx = 3; break;
-            }
-            macro[DefIdx].Definition = "1";
-            V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-                _T("SparseVolume_VolumeUpdate_cs.hlsl")).c_str(), macro,
-                D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
-                "cs_5_1", compileFlags, 0, &volUpdateCS[i][j]));
-            V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-                _T("SparseVolume_VolumeUpdate_ps.hlsl")).c_str(), macro,
-                D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
-                "ps_5_1", compileFlags, 0, &volUpdatePS[i][j]));
-            V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-                _T("SparseVolume_RayCast_ps.hlsl")).c_str(), macro,
-                D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
-                "ps_5_1", compileFlags, 0, &raycastPS[i][j][kNoFilter]));
-            macro[4].Definition = "1"; // FILTER_READ
-            V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-                _T("SparseVolume_RayCast_ps.hlsl")).c_str(), macro,
-                D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
-                "ps_5_1", compileFlags, 0, &raycastPS[i][j][kLinearFilter]));
-            macro[4].Definition = "2"; // FILTER_READ
-            V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-                _T("SparseVolume_RayCast_ps.hlsl")).c_str(), macro,
-                D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
-                "ps_5_1", compileFlags, 0, &raycastPS[i][j][kSamplerLinear]));
-            macro[4].Definition = "3"; // FILTER_READ
-            V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-                _T("SparseVolume_RayCast_ps.hlsl")).c_str(), macro,
-                D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
-                "ps_5_1", compileFlags, 0, &raycastPS[i][j][kSamplerAniso]));
-            macro[4].Definition = "0"; // FILTER_READ
-            macro[DefIdx].Definition = "0";
-        }
-    }
-    // Create Rootsignature
-    _rootsig.Reset(4, 2);
-    _rootsig.InitStaticSampler(0, Graphics::g_SamplerLinearClampDesc);
-    _rootsig.InitStaticSampler(1, Graphics::g_SamplerAnisoWrapDesc);
-    _rootsig[0].InitAsConstantBuffer(0);
-    _rootsig[1].InitAsConstantBuffer(1);
-    _rootsig[2].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_UAV, 0, 2);
-    _rootsig[3].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 2);
-    _rootsig.Finalize(L"SparseVolume",
-        D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT |
-        D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
-        D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS);
-
-    // Define the vertex input layout.
-    D3D12_INPUT_ELEMENT_DESC inputElementDescs[] = {
-        {"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
-        D3D12_APPEND_ALIGNED_ELEMENT,
-        D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}
-    };
-
-    // Create PSO for volume update and volume render
-    DXGI_FORMAT ColorFormat = Graphics::g_SceneColorBuffer.GetFormat();
-    DXGI_FORMAT DepthFormat = Graphics::g_SceneDepthBuffer.GetFormat();
-    DXGI_FORMAT Tex3DFormat = DXGI_FORMAT_R32G32B32A32_FLOAT;
-    for (int k = 0; k < kNumStruct; ++k) {
-        for (int i = 0; i < ManagedBuf::kNumType; ++i) {
-            for (int j = 0; j < kNumFilter; ++j) {
-                _gfxRenderPSO[i][k][j].SetRootSignature(_rootsig);
-                _gfxRenderPSO[i][k][j].SetInputLayout(
-                    _countof(inputElementDescs), inputElementDescs);
-                _gfxRenderPSO[i][k][j].SetRasterizerState(
-                    Graphics::g_RasterizerDefault);
-                _gfxRenderPSO[i][k][j].SetBlendState(Graphics::g_BlendDisable);
-                _gfxRenderPSO[i][k][j].SetDepthStencilState(
-                    Graphics::g_DepthStateReadWrite);
-                _gfxRenderPSO[i][k][j].SetSampleMask(UINT_MAX);
-                _gfxRenderPSO[i][k][j].SetPrimitiveTopologyType(
-                    D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
-                _gfxRenderPSO[i][k][j].SetRenderTargetFormats(
-                    1, &ColorFormat, DepthFormat);
-                _gfxRenderPSO[i][k][j].SetVertexShader(
-                    cubeVS->GetBufferPointer(), cubeVS->GetBufferSize());
-                _gfxRenderPSO[i][k][j].SetPixelShader(
-                    raycastPS[i][k][j]->GetBufferPointer(),
-                    raycastPS[i][k][j]->GetBufferSize());
-                _gfxRenderPSO[i][k][j].Finalize();
-            }
-            _cptUpdatePSO[i][k].SetRootSignature(_rootsig);
-            _cptUpdatePSO[i][k].SetComputeShader(
-                volUpdateCS[i][k]->GetBufferPointer(),
-                volUpdateCS[i][k]->GetBufferSize());
-            _cptUpdatePSO[i][k].Finalize();
-
-            _gfxUpdatePSO[i][k].SetRootSignature(_rootsig);
-            _gfxUpdatePSO[i][k].SetInputLayout(
-                _countof(inputElementDescs), inputElementDescs);
-            _gfxUpdatePSO[i][k].SetRasterizerState(
-                Graphics::g_RasterizerDefault);
-            _gfxUpdatePSO[i][k].SetBlendState(Graphics::g_BlendDisable);
-            _gfxUpdatePSO[i][k].SetDepthStencilState(
-                Graphics::g_DepthStateDisabled);
-            _gfxUpdatePSO[i][k].SetSampleMask(UINT_MAX);
-            _gfxUpdatePSO[i][k].SetPrimitiveTopologyType(
-                D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT);
-            _gfxUpdatePSO[i][k].SetRenderTargetFormats(
-                1, &Tex3DFormat , DXGI_FORMAT_UNKNOWN);
-            _gfxUpdatePSO[i][k].SetVertexShader(
-                volUpdateVS->GetBufferPointer(), volUpdateVS->GetBufferSize());
-            _gfxUpdatePSO[i][k].SetGeometryShader(
-                volUpdateGS->GetBufferPointer(), volUpdateGS->GetBufferSize());
-            _gfxUpdatePSO[i][k].SetPixelShader(
-                volUpdatePS[i][k]->GetBufferPointer(),
-                volUpdatePS[i][k]->GetBufferSize());
-            _gfxUpdatePSO[i][k].Finalize();
-        }
-    }
-
-    // Create PSO for render near far plane
-    ComPtr<ID3DBlob> stepInfoPS, stepInfoDebugPS, resetCS;
-    D3D_SHADER_MACRO macro1[] = {
-        {"__hlsl", "1"},
-        {"DEBUG_VIEW", "0"},
-        {nullptr, nullptr}
-    };
-    V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-        _T("SparseVolume_StepInfo_cs.hlsl")).c_str(), macro1,
-        D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
-        "cs_5_1", compileFlags, 0, &resetCS));
-    V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-        _T("SparseVolume_StepInfo_ps.hlsl")).c_str(), macro1,
-        D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
-        "ps_5_1", compileFlags, 0, &stepInfoPS));
-    V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-        _T("SparseVolume_StepInfo_vs.hlsl")).c_str(), macro1,
-        D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
-        "vs_5_1", compileFlags, 0, &stepInfoVS));
-    macro[1].Definition = "1";
-    V(Graphics::CompileShaderFromFile(Core::GetAssetFullPath(
-        _T("SparseVolume_StepInfo_ps.hlsl")).c_str(), macro1,
-        D3D_COMPILE_STANDARD_FILE_INCLUDE, "main",
-        "ps_5_1", compileFlags, 0, &stepInfoDebugPS));
-
-    // Create PSO for clean brick volume
-    _cptFlagVolResetPSO.SetRootSignature(_rootsig);
-    _cptFlagVolResetPSO.SetComputeShader(
-        resetCS->GetBufferPointer(), resetCS->GetBufferSize());
-    _cptFlagVolResetPSO.Finalize();
-
-    _gfxStepInfoPSO.SetRootSignature(_rootsig);
-    _gfxStepInfoPSO.SetPrimitiveRestart(
-        D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_0xFFFF);
-    _gfxStepInfoPSO.SetInputLayout(
-        _countof(inputElementDescs), inputElementDescs);
-    _gfxStepInfoPSO.SetDepthStencilState(Graphics::g_DepthStateDisabled);
-    _gfxStepInfoPSO.SetSampleMask(UINT_MAX);
-    _gfxStepInfoPSO.SetVertexShader(
-        stepInfoVS->GetBufferPointer(), stepInfoVS->GetBufferSize());
-    _gfxStepInfoDebugPSO = _gfxStepInfoPSO;
-    _gfxStepInfoPSO.SetRasterizerState(Graphics::g_RasterizerTwoSided);
-    D3D12_RASTERIZER_DESC rastDesc = Graphics::g_RasterizerTwoSided;
-    rastDesc.FillMode = D3D12_FILL_MODE_WIREFRAME;
-    _gfxStepInfoDebugPSO.SetRasterizerState(rastDesc);
-    _gfxStepInfoDebugPSO.SetBlendState(Graphics::g_BlendDisable);
-    D3D12_BLEND_DESC blendDesc = {};
-    blendDesc.AlphaToCoverageEnable = false;
-    blendDesc.IndependentBlendEnable = false;
-    blendDesc.RenderTarget[0].BlendEnable = true;
-    blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_MIN;
-    blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
-    blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
-    blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_MAX;
-    blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
-    blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ONE;
-    blendDesc.RenderTarget[0].RenderTargetWriteMask =
-        D3D12_COLOR_WRITE_ENABLE_RED | D3D12_COLOR_WRITE_ENABLE_GREEN;
-    _gfxStepInfoPSO.SetBlendState(blendDesc);
-    _gfxStepInfoPSO.SetPrimitiveTopologyType(
-        D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
-    _gfxStepInfoDebugPSO.SetPrimitiveTopologyType(
-        D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE);
-    _gfxStepInfoDebugPSO.SetRenderTargetFormats(1, &ColorFormat, DepthFormat);
-    _gfxStepInfoPSO.SetRenderTargetFormats(
-        1, &_stepInfoTexFormat, DXGI_FORMAT_UNKNOWN);
-    _gfxStepInfoPSO.SetPixelShader(
-        stepInfoPS->GetBufferPointer(), stepInfoPS->GetBufferSize());
-    _gfxStepInfoDebugPSO.SetPixelShader(
-        stepInfoPS->GetBufferPointer(), stepInfoDebugPS->GetBufferSize());
-    _gfxStepInfoPSO.Finalize();
-    _gfxStepInfoDebugPSO.Finalize();
-
-    const uint32_t vertexBufferSize = sizeof(cubeVertices);
-    _cubeVB.Create(L"Vertex Buffer", ARRAYSIZE(cubeVertices),
-        sizeof(XMFLOAT3), (void*)cubeVertices);
-
-    _cubeTriangleStripIB.Create(L"Cube TriangleStrip Index Buffer",
-        ARRAYSIZE(cubeTrianglesStripIndices), sizeof(uint16_t),
-        (void*)cubeTrianglesStripIndices);
-
-    _cubeLineStripIB.Create(L"Cube LineStrip Index Buffer",
-        ARRAYSIZE(cubeLineStripIndices), sizeof(uint16_t),
-        (void*)cubeLineStripIndices);
+    std::call_once(_psoCompiled_flag, _CreatePSOs);
 }
 
 void
@@ -371,25 +371,33 @@ SparseVolume::OnResize()
 }
 
 void
+SparseVolume::OnUpdate()
+{
+    ManagedBuf::BufInterface newBufInterface = _volBuf.GetResource();
+    _needVolumeRebuild = _curBufInterface.resource != newBufInterface.resource; 
+    _curBufInterface = newBufInterface;
+
+    const uint3& reso = _volBuf.GetReso();
+    if (_IsResolutionChanged(reso, _curReso)) {
+        _curReso = reso;
+        _UpdateVolumeSettings(reso);
+        _CreateBrickVolume(reso, _ratios[_ratioIdx]);
+    }
+}
+
+void
 SparseVolume::OnRender(CommandContext& cmdContext, const DirectX::XMMATRIX& wvp,
     const DirectX::XMMATRIX& mView, const DirectX::XMFLOAT4& eyePos)
 {
     static bool usePS = _usePSUpdate;
     _UpdatePerFrameData(wvp, mView, eyePos);
-    ManagedBuf::BufInterface vol = _volBuf.GetResource();
-
-    const uint3& reso = _volBuf.GetReso();
-    if (_IsResolutionChanged(reso, _curReso)) {
-        _UpdateVolumeSettings(reso);
-        _CreateBrickVolume();
-    }
 
     cmdContext.BeginResourceTransition(Graphics::g_SceneColorBuffer,
         D3D12_RESOURCE_STATE_RENDER_TARGET);
     cmdContext.BeginResourceTransition(Graphics::g_SceneDepthBuffer,
         D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
-    if (_isAnimated) {
+    if (_isAnimated || _needVolumeRebuild) {
         ComputeContext& cptContext = cmdContext.GetComputeContext();
         if (_useStepInfoTex) {
             cptContext.TransitionResource(_flagVol,
@@ -398,12 +406,12 @@ SparseVolume::OnRender(CommandContext& cmdContext, const DirectX::XMMATRIX& wvp,
             cptContext.TransitionResource(_flagVol,
                 D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         }
-        cmdContext.TransitionResource(*vol.resource,
-            usePS && vol.type == ManagedBuf::k3DTexBuffer
+        cmdContext.TransitionResource(*_curBufInterface.resource,
+            usePS && _curBufInterface.type == ManagedBuf::k3DTexBuffer
             ? D3D12_RESOURCE_STATE_RENDER_TARGET
             : D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-        _UpdateVolume(cmdContext, vol, usePS);
-        cmdContext.BeginResourceTransition(*vol.resource,
+        _UpdateVolume(cmdContext, _curBufInterface, usePS);
+        cmdContext.BeginResourceTransition(*_curBufInterface.resource,
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         if (_useStepInfoTex) {
             cmdContext.BeginResourceTransition(_flagVol,
@@ -443,12 +451,12 @@ SparseVolume::OnRender(CommandContext& cmdContext, const DirectX::XMMATRIX& wvp,
             D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
     }
     
-    gfxContext.TransitionResource(*vol.resource,
+    gfxContext.TransitionResource(*_curBufInterface.resource,
         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-    _RenderVolume(gfxContext, vol);
+    _RenderVolume(gfxContext, _curBufInterface);
     usePS = _usePSUpdate;
-    gfxContext.BeginResourceTransition(*vol.resource,
-        usePS && vol.type == ManagedBuf::k3DTexBuffer
+    gfxContext.BeginResourceTransition(*_curBufInterface.resource,
+        usePS && _curBufInterface.type == ManagedBuf::k3DTexBuffer
         ? D3D12_RESOURCE_STATE_RENDER_TARGET
         : D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
     
@@ -456,8 +464,6 @@ SparseVolume::OnRender(CommandContext& cmdContext, const DirectX::XMMATRIX& wvp,
         if (_stepInfoDebug) {
             _RenderBrickGrid(gfxContext);
         }
-        cmdContext.BeginResourceTransition(_flagVol,
-            D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
         cmdContext.BeginResourceTransition(_stepInfoTex,
             D3D12_RESOURCE_STATE_RENDER_TARGET);
     }
@@ -470,7 +476,11 @@ SparseVolume::RenderGui()
     if (ImGui::CollapsingHeader("Sparse Volume", 0, true, true)) {
         ImGui::Checkbox("Animation", &_isAnimated);
         ImGui::Separator();
-        ImGui::Checkbox("StepInfoTex", &_useStepInfoTex); ImGui::SameLine();
+        if (ImGui::Checkbox("StepInfoTex", &_useStepInfoTex) &&
+            _useStepInfoTex) {
+            _needVolumeRebuild |= true;
+        }
+        ImGui::SameLine();
         ImGui::Checkbox("Debug", &_stepInfoDebug);
         ImGui::Checkbox("Use PS Update", &_usePSUpdate);
         ImGui::Separator();
@@ -486,8 +496,10 @@ SparseVolume::RenderGui()
         _filterType = (FilterType)iFilterType;
         static int uMetaballCount =
             (int)_cbPerCall.uNumOfBalls;
-        ImGui::DragInt("Metaball Count",
-            (int*)&_cbPerCall.uNumOfBalls, 0.5f, 5, 128);
+        if (ImGui::DragInt("Metaball Count",
+            (int*)&_cbPerCall.uNumOfBalls, 0.5f, 5, 128)) {
+            _needVolumeRebuild |= true;
+        }
 
         ImGui::Separator();
         ImGui::Text("Buffer Settings:");
@@ -530,7 +542,8 @@ SparseVolume::RenderGui()
             _ratioIdx = iIdx;
             PRINTINFO("Ratio:%d", _ratios[_ratioIdx]);
             _volParam->uVoxelBrickRatio = _ratios[_ratioIdx];
-            _CreateBrickVolume();
+            _CreateBrickVolume(_curReso, _ratios[_ratioIdx]);
+            _needVolumeRebuild |= true;
         }
         ImGui::Separator();
 
@@ -566,14 +579,12 @@ SparseVolume::RenderGui()
 }
 
 void
-SparseVolume::_CreateBrickVolume()
+SparseVolume::_CreateBrickVolume(const uint3& reso, const uint ratio)
 {
     Graphics::g_cmdListMngr.IdleGPU();
     _flagVol.Destroy();
-    _curReso = _volBuf.GetReso();
-    const uint ratio=_volParam->uVoxelBrickRatio;
-    _flagVol.Create(L"FlagVol", _curReso.x / ratio, _curReso.y / ratio,
-        _curReso.z / ratio, 1, DXGI_FORMAT_R8_UINT);
+    _flagVol.Create(L"FlagVol", reso.x / ratio, reso.y / ratio,
+        reso.z / ratio, 1, DXGI_FORMAT_R8_UINT);
 }
 
 void
@@ -583,7 +594,7 @@ SparseVolume::_UpdatePerFrameData(const DirectX::XMMATRIX& wvp,
     _cbPerFrame.mWorldViewProj = wvp;
     _cbPerFrame.mView = mView;
     _cbPerFrame.f4ViewPos = eyePos;
-    if (_isAnimated) {
+    if (_isAnimated || _needVolumeRebuild) {
         _animateTime += Core::g_deltaTime;
         for (uint i = 0; i < _cbPerCall.uNumOfBalls; i++) {
             Ball ball = _ballsData[i];
@@ -661,7 +672,7 @@ SparseVolume::_UpdateVolumeSettings(const uint3 reso)
         0.5f * reso.y * voxelSize, 0.5f * reso.z * voxelSize);
     _volParam->f3BoxMin = float3(-0.5f * reso.x * voxelSize,
         -0.5f * reso.y * voxelSize, -0.5f * reso.z * voxelSize);
-    _BuildBrickRatioVector(min(reso.x, min(reso.y, reso.z)));
+    _BuildBrickRatioVector(min(reso.x, min(reso.y, reso.z)), _ratios);
     _ratioIdx = _ratioIdx >= (int)_ratios.size()
         ? (int)_ratios.size() - 1 : _ratioIdx;
     _volParam->uVoxelBrickRatio = _ratios[_ratioIdx];
@@ -730,6 +741,7 @@ void
 SparseVolume::_RenderNearFar(GraphicsContext& gfxContext)
 {
     GPU_PROFILE(gfxContext, L"Render NearFar");
+    gfxContext.SetRootSignature(_rootsig);
     gfxContext.SetPipelineState(_gfxStepInfoPSO);
     gfxContext.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     gfxContext.SetRenderTargets(1, &_stepInfoTex.GetRTV());
