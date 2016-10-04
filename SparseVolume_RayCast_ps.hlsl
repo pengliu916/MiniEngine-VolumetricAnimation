@@ -69,7 +69,7 @@ float4 readVolume(float3 f3Idx)
 {
     uint3 u3Idx000 = f3Idx;
 #if FILTER_READ == 1
-    float3 f3d = f3Idx - u3Idx000;
+    float3 f3d = f3Idx - u3Idx000 - 0.5f;
     float4 f4V000 = tex_srvDataVol[BUFFER_INDEX(u3Idx000)];
     float4 f4V001 = tex_srvDataVol[BUFFER_INDEX(u3Idx000 + uint3(0, 0, 1))];
     float4 f4V010 = tex_srvDataVol[BUFFER_INDEX(u3Idx000 + uint3(0, 1, 0))];
