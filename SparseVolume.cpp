@@ -13,6 +13,8 @@ namespace {
     bool _useStepInfoTex = false;
     bool _stepInfoDebug = false;
     bool _usePSUpdate = false;
+    bool _isoRender = false;
+    bool _useNormal = false;
 
     // define the geometry for a triangle.
     const XMFLOAT3 cubeVertices[] = {
@@ -34,8 +36,11 @@ namespace {
     RootSignature _rootsig;
     ComputePSO _cptUpdatePSO[ManagedBuf::kNumType][SparseVolume::kNumStruct];
     GraphicsPSO _gfxUpdatePSO[ManagedBuf::kNumType][SparseVolume::kNumStruct];
-    GraphicsPSO _gfxRenderPSO[ManagedBuf::kNumType]
+    GraphicsPSO _gfxVolumeRenderPSO[ManagedBuf::kNumType]
         [SparseVolume::kNumStruct][SparseVolume::kNumFilter];
+    GraphicsPSO _gfxISOSurfRenderPSO
+        [ManagedBuf::kNumType][SparseVolume::kNumStruct]
+        [SparseVolume::kNumFilter][SparseVolume::kNumNormal];
     GraphicsPSO _gfxStepInfoPSO;
     GraphicsPSO _gfxStepInfoDebugPSO;
     ComputePSO _cptFlagVolResetPSO;
@@ -118,6 +123,9 @@ namespace {
             [SparseVolume::kNumStruct][SparseVolume::kNumFilter];
         ComPtr<ID3DBlob>
             volUpdatePS[ManagedBuf::kNumType][SparseVolume::kNumStruct];
+        ComPtr<ID3DBlob> isoRenderPS[ManagedBuf::kNumType]
+            [SparseVolume::kNumStruct][SparseVolume::kNumFilter]
+            [SparseVolume::kNumNormal];
 
         D3D_SHADER_MACRO macro[] = {
             {"__hlsl", "1"},//0
@@ -126,6 +134,8 @@ namespace {
             {"TEX3D_UAV", "0"},//3
             {"FILTER_READ", "0"},//4
             {"ENABLE_BRICKS", "0"},//5
+            {"ISO_SURFACE", "0"},//6
+            {"USE_NORMAL", "0"},//7
             {nullptr, nullptr}
         };
 
@@ -149,17 +159,21 @@ namespace {
                     macro, &volUpdateCS[i][j]));
                 V(_Compile(L"SparseVolume_VolumeUpdate_ps.hlsl", "ps_5_1",
                     macro, &volUpdatePS[i][j]));
-                V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1",
-                    macro, &raycastPS[i][j][SparseVolume::kNoFilter]));
-                macro[4].Definition = "1"; // FILTER_READ
-                V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1",
-                    macro, &raycastPS[i][j][SparseVolume::kLinearFilter]));
-                macro[4].Definition = "2"; // FILTER_READ
-                V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1",
-                    macro, &raycastPS[i][j][SparseVolume::kSamplerLinear]));
-                macro[4].Definition = "3"; // FILTER_READ
-                V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1",
-                    macro, &raycastPS[i][j][SparseVolume::kSamplerAniso]));
+                for (int k = 0; k < SparseVolume::kNumFilter; ++k) {
+                    char tmp[8];
+                    sprintf_s(tmp, 8, "%d", k);
+                    macro[4].Definition = tmp;
+                    V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1",
+                        macro, &raycastPS[i][j][(SparseVolume::FilterType)k]));
+                    macro[6].Definition = "1"; // ISO_SURFACE
+                    V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1", macro,
+                        &isoRenderPS[i][j][(SparseVolume::FilterType)k][0]));
+                    macro[7].Definition = "1"; // USE_NORMAL
+                    V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1", macro,
+                        &isoRenderPS[i][j][(SparseVolume::FilterType)k][1]));
+                    macro[7].Definition = "0"; // USE_NORMAL
+                    macro[6].Definition = "0"; // ISO_SURFACE
+                }
                 macro[4].Definition = "0"; // FILTER_READ
                 macro[DefIdx].Definition = "0";
             }
@@ -193,26 +207,40 @@ namespace {
         for (int k = 0; k < SparseVolume::kNumStruct; ++k) {
             for (int i = 0; i < ManagedBuf::kNumType; ++i) {
                 for (int j = 0; j < SparseVolume::kNumFilter; ++j) {
-                    _gfxRenderPSO[i][k][j].SetRootSignature(_rootsig);
-                    _gfxRenderPSO[i][k][j].SetInputLayout(
+                    _gfxVolumeRenderPSO[i][k][j].SetRootSignature(_rootsig);
+                    _gfxVolumeRenderPSO[i][k][j].SetInputLayout(
                         _countof(inputElementDescs), inputElementDescs);
-                    _gfxRenderPSO[i][k][j].SetRasterizerState(
+                    _gfxVolumeRenderPSO[i][k][j].SetRasterizerState(
                         Graphics::g_RasterizerDefault);
-                    _gfxRenderPSO[i][k][j].SetBlendState(
+                    _gfxVolumeRenderPSO[i][k][j].SetBlendState(
                         Graphics::g_BlendDisable);
-                    _gfxRenderPSO[i][k][j].SetDepthStencilState(
+                    _gfxVolumeRenderPSO[i][k][j].SetDepthStencilState(
                         Graphics::g_DepthStateReadWrite);
-                    _gfxRenderPSO[i][k][j].SetSampleMask(UINT_MAX);
-                    _gfxRenderPSO[i][k][j].SetPrimitiveTopologyType(
+                    _gfxVolumeRenderPSO[i][k][j].SetSampleMask(UINT_MAX);
+                    _gfxVolumeRenderPSO[i][k][j].SetPrimitiveTopologyType(
                         D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
-                    _gfxRenderPSO[i][k][j].SetRenderTargetFormats(
+                    _gfxVolumeRenderPSO[i][k][j].SetRenderTargetFormats(
                         1, &ColorFormat, DepthFormat);
-                    _gfxRenderPSO[i][k][j].SetVertexShader(
+                    _gfxVolumeRenderPSO[i][k][j].SetVertexShader(
                         cubeVS->GetBufferPointer(), cubeVS->GetBufferSize());
-                    _gfxRenderPSO[i][k][j].SetPixelShader(
+
+                    _gfxISOSurfRenderPSO[i][k][j][0] =
+                        _gfxVolumeRenderPSO[i][k][j];
+                    _gfxISOSurfRenderPSO[i][k][j][0].SetPixelShader(
+                        isoRenderPS[i][k][j][0]->GetBufferPointer(),
+                        isoRenderPS[i][k][j][0]->GetBufferSize());
+                    _gfxISOSurfRenderPSO[i][k][j][0].Finalize();
+                    _gfxISOSurfRenderPSO[i][k][j][1] =
+                        _gfxVolumeRenderPSO[i][k][j];
+                    _gfxISOSurfRenderPSO[i][k][j][1].SetPixelShader(
+                        isoRenderPS[i][k][j][1]->GetBufferPointer(),
+                        isoRenderPS[i][k][j][1]->GetBufferSize());
+                    _gfxISOSurfRenderPSO[i][k][j][1].Finalize();
+
+                    _gfxVolumeRenderPSO[i][k][j].SetPixelShader(
                         raycastPS[i][k][j]->GetBufferPointer(),
                         raycastPS[i][k][j]->GetBufferSize());
-                    _gfxRenderPSO[i][k][j].Finalize();
+                    _gfxVolumeRenderPSO[i][k][j].Finalize();
                 }
                 _cptUpdatePSO[i][k].SetRootSignature(_rootsig);
                 _cptUpdatePSO[i][k].SetComputeShader(
@@ -483,7 +511,14 @@ SparseVolume::RenderGui()
         ImGui::SameLine();
         ImGui::Checkbox("Debug", &_stepInfoDebug);
         ImGui::Checkbox("Use PS Update", &_usePSUpdate);
+
+        ImGui::Checkbox("ISOSurface", &_isoRender);
+        if (_isoRender) {
+            ImGui::SameLine();
+            ImGui::Checkbox("Use Normal", &_useNormal);
+        }
         ImGui::Separator();
+
         static int iFilterType = (int)_filterType;
         ImGui::RadioButton("No Filter", &iFilterType, kNoFilter);
         ImGui::RadioButton("Linear Filter", &iFilterType, kLinearFilter);
@@ -760,7 +795,13 @@ SparseVolume::_RenderVolume(GraphicsContext& gfxContext,
 {
     GPU_PROFILE(gfxContext, L"Rendering");
     VolumeStruct type = _useStepInfoTex ? kFlagVol : kVoxel;
-    gfxContext.SetPipelineState(_gfxRenderPSO[buf.type][type][_filterType]);
+    if (_isoRender) {
+        gfxContext.SetPipelineState(
+            _gfxISOSurfRenderPSO[buf.type][type][_filterType][_useNormal]);
+    } else {
+        gfxContext.SetPipelineState(
+            _gfxVolumeRenderPSO[buf.type][type][_filterType]);
+    }
     gfxContext.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     gfxContext.SetDynamicDescriptors(3, 0, 1, &buf.SRV);
     if (_useStepInfoTex) {

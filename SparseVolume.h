@@ -18,6 +18,12 @@ public:
         kNumFilter
     };
 
+    enum RaycastNormal {
+        kNoNormal = 0,
+        kUseNormal,
+        kNumNormal
+    };
+
     struct Ball {
         float fPower; // size of this metaball
         float fOribtRadius; // radius of orbit

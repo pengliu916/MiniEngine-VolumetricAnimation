@@ -15,6 +15,11 @@ Texture2D<float2> tex_srvNearFar : register(t1);
 SamplerState samp_Linear : register(s0);
 SamplerState samp_Aniso : register(s1);
 
+#if TEX3D_UAV && FILTER_READ == 2
+#define SAMPLER samp_Linear
+#elif TEX3D_UAV && FILTER_READ == 3
+#define SAMPLER samp_Aniso
+#endif
 
 //------------------------------------------------------------------------------
 // Structures
@@ -67,17 +72,17 @@ float transferFunction(float fDensity)
 
 float4 readVolume(float3 f3Idx)
 {
-    uint3 u3Idx000 = f3Idx;
+    int3 i3Idx000;
+    float3 f3d = modf(f3Idx, i3Idx000) - 0.5f;
 #if FILTER_READ == 1
-    float3 f3d = f3Idx - u3Idx000 - 0.5f;
-    float4 f4V000 = tex_srvDataVol[BUFFER_INDEX(u3Idx000)];
-    float4 f4V001 = tex_srvDataVol[BUFFER_INDEX(u3Idx000 + uint3(0, 0, 1))];
-    float4 f4V010 = tex_srvDataVol[BUFFER_INDEX(u3Idx000 + uint3(0, 1, 0))];
-    float4 f4V011 = tex_srvDataVol[BUFFER_INDEX(u3Idx000 + uint3(0, 1, 1))];
-    float4 f4V100 = tex_srvDataVol[BUFFER_INDEX(u3Idx000 + uint3(1, 0, 0))];
-    float4 f4V101 = tex_srvDataVol[BUFFER_INDEX(u3Idx000 + uint3(1, 0, 1))];
-    float4 f4V110 = tex_srvDataVol[BUFFER_INDEX(u3Idx000 + uint3(1, 1, 0))];
-    float4 f4V111 = tex_srvDataVol[BUFFER_INDEX(u3Idx000 + uint3(1, 1, 1))];
+    float4 f4V000 = tex_srvDataVol[BUFFER_INDEX(i3Idx000)];
+    float4 f4V001 = tex_srvDataVol[BUFFER_INDEX(i3Idx000 + uint3(0, 0, 1))];
+    float4 f4V010 = tex_srvDataVol[BUFFER_INDEX(i3Idx000 + uint3(0, 1, 0))];
+    float4 f4V011 = tex_srvDataVol[BUFFER_INDEX(i3Idx000 + uint3(0, 1, 1))];
+    float4 f4V100 = tex_srvDataVol[BUFFER_INDEX(i3Idx000 + uint3(1, 0, 0))];
+    float4 f4V101 = tex_srvDataVol[BUFFER_INDEX(i3Idx000 + uint3(1, 0, 1))];
+    float4 f4V110 = tex_srvDataVol[BUFFER_INDEX(i3Idx000 + uint3(1, 1, 0))];
+    float4 f4V111 = tex_srvDataVol[BUFFER_INDEX(i3Idx000 + uint3(1, 1, 1))];
     return f4V000 * (1.f - f3d.x) * (1.f - f3d.y) * (1.f - f3d.z) +
         f4V100 * f3d.x * (1.f - f3d.y) * (1.f - f3d.z) +
         f4V010 * (1.f - f3d.x) * f3d.y * (1.f - f3d.z) +
@@ -86,27 +91,21 @@ float4 readVolume(float3 f3Idx)
         f4V011 * (1.f - f3d.x) * f3d.y * f3d.z +
         f4V110 * f3d.x * f3d.y * (1.f - f3d.z) +
         f4V111 * f3d.x * f3d.y * f3d.z;
-#elif TEX3D_UAV && FILTER_READ == 2
-    return tex_srvDataVol.SampleLevel(
-        samp_Linear, f3Idx / vParam.u3VoxelReso, 0);
-#elif TEX3D_UAV && FILTER_READ == 3
-    return tex_srvDataVol.SampleLevel(
-        samp_Aniso, f3Idx / vParam.u3VoxelReso, 0);
+#elif TEX3D_UAV && FILTER_READ > 1
+    return tex_srvDataVol.SampleLevel(SAMPLER, f3Idx / vParam.u3VoxelReso, 0);
 #else
-    return tex_srvDataVol[BUFFER_INDEX(u3Idx000)];
-#endif // !FILTER_READ
+    return tex_srvDataVol[BUFFER_INDEX(i3Idx000)];
+#endif
 }
 
+#if !ISO_SURFACE
 void accumulatedShading(Ray eyeray, float2 f2NearFar, float2 f2MinMaxDen,
     inout float4 f4OutColor)
 {
-    float3 f3Pnear = eyeray.f4o.xyz + eyeray.f4d.xyz * f2NearFar.x;
-    float3 f3Pfar = eyeray.f4o.xyz + eyeray.f4d.xyz * f2NearFar.y;
-
-    float3 f3P = f3Pnear;
+    float3 f3P = eyeray.f4o.xyz + eyeray.f4d.xyz * f2NearFar.x;
     float t = f2NearFar.x;
-    float fStep = 0.8f * vParam.fVoxelSize;
-    float3 f3PsmallStep = eyeray.f4d.xyz * fStep;
+    float fDeltaT = vParam.fVoxelSize;
+    float3 f3Step = eyeray.f4d.xyz * fDeltaT;
 
     float4 f4AccuData = 0;
     while (t <= f2NearFar.y) {
@@ -122,12 +121,57 @@ void accumulatedShading(Ray eyeray, float2 f2NearFar, float2 f2MinMaxDen,
         if (f4AccuData.a >= 0.95f) {
             break;
         }
-        f3P += f3PsmallStep;
-        t += fStep;
+        f3P += f3Step;
+        t += fDeltaT;
     }
     f4OutColor = f4AccuData * f4AccuData.a;
     return;
 }
+#else
+float3 getNormal(float3 f3Idx)
+{
+    float f000 = readVolume(f3Idx).x;
+    float f100 = readVolume(f3Idx + float3(1.f, 0.f, 0.f)).x;
+    float f010 = readVolume(f3Idx + float3(0.f, 1.f, 0.f)).x;
+    float f001 = readVolume(f3Idx + float3(0.f, 0.f, 1.f)).x;
+    return normalize(float3(f100 - f000, f010 - f000, f001 - f000));
+}
+
+void isoSurfaceShading(Ray eyeray, float2 f2NearFar, float fISOValue,
+    inout float4 f4OutColor)
+{
+    float3 f3P = eyeray.f4o.xyz + eyeray.f4d.xyz * f2NearFar.x;
+    float3 f3PreP = f3P;
+    float t = f2NearFar.x;
+    float fDeltaT = vParam.fVoxelSize;
+    float3 f3Step = eyeray.f4d.xyz * fDeltaT;
+    float fPreDensity = 0;
+    float fCurDensity = 0;
+    while (t <= f2NearFar.y) {
+        fPreDensity = fCurDensity;
+        float3 f3Idx = f3P / vParam.fVoxelSize + vParam.u3VoxelReso * 0.5f;
+        float4 f4Field = readVolume(f3Idx);
+        fCurDensity = f4Field.x;
+        if (sign(fCurDensity - fISOValue) != sign(fPreDensity - fISOValue)) {
+            float3 f3SurfPos = lerp(f3PreP, f3P,
+                (fISOValue - fPreDensity) / (fCurDensity - fPreDensity));
+#if USE_NORMAL
+            float3 f3Normal = getNormal(
+                f3SurfPos / vParam.fVoxelSize + vParam.u3VoxelReso * 0.5f);
+            f4OutColor = float4(f3Normal * 0.5f + 0.5f, 1);
+#else
+            f4OutColor = float4(1,1,1,1) *
+                frac(f3SurfPos.z * 20.f);
+#endif
+            return;
+        }
+        f3PreP = f3P;
+        f3P += f3Step;
+        t += fDeltaT;
+    }
+    return;
+}
+#endif // !ISO_SURFACE
 
 //------------------------------------------------------------------------------
 // Pixel Shader
@@ -163,9 +207,12 @@ float4 main( float4 f4Pos : POSITION,
         fTnear = 0;
     }
     float4 f4Col = float4(1.f, 1.f, 1.f, 0.f) * 0.01f;
-    float fDepth = 1000.f;
-
+#if ISO_SURFACE
+    isoSurfaceShading(eyeray, float2(fTnear, fTfar),
+        (vParam.fMinDensity + vParam.fMaxDensity) * 0.5f, f4Col);
+#else
     accumulatedShading( eyeray, float2(fTnear,fTfar),
         float2(vParam.fMinDensity, vParam.fMaxDensity), f4Col);
+#endif
     return f4Col;
 }
