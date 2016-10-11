@@ -421,7 +421,7 @@ void DenseVolume::CookVolume(uint32_t Width, uint32_t Height, uint32_t Depth,
 
     if (BufType == kTypedBuffer) {
         _typedVolumeBuffer[1 - _onStageIndex].SetFormat(
-            DXGI_FORMAT_R11G11B10_FLOAT);
+            DXGI_FORMAT_R8G8B8A8_UINT);
         _typedVolumeBuffer[1 - _onStageIndex].Create(L"Typed Volume Buffer",
             BufferElmCount, 4 * sizeof(uint8_t), pBufPtr);
     }
