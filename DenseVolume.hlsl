@@ -124,9 +124,6 @@ float4 ps_raycast_main(VSOutput input) : SV_TARGET
     eyeray.o = viewPos;
     eyeray.d = input.Pos - eyeray.o;
     eyeray.d = normalize(eyeray.d);
-    eyeray.d.x = (eyeray.d.x == 0.f) ? 1e-15 : eyeray.d.x;
-    eyeray.d.y = (eyeray.d.y == 0.f) ? 1e-15 : eyeray.d.y;
-    eyeray.d.z = (eyeray.d.z == 0.f) ? 1e-15 : eyeray.d.z;
 
     // calculate ray intersection with bounding box
     float tnear, tfar;

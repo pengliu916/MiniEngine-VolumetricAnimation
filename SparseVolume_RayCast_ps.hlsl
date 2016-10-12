@@ -184,9 +184,6 @@ float4 main( float4 f4Pos : POSITION,
     eyeray.f4o = f4ViewPos;
     eyeray.f4d = f4Pos - eyeray.f4o;
     eyeray.f4d = normalize( eyeray.f4d );
-    eyeray.f4d.x = (eyeray.f4d.x == 0.f) ? 1e-15 : eyeray.f4d.x;
-    eyeray.f4d.y = (eyeray.f4d.y == 0.f) ? 1e-15 : eyeray.f4d.y;
-    eyeray.f4d.z = (eyeray.f4d.z == 0.f) ? 1e-15 : eyeray.f4d.z;
 
     // calculate ray intersection with bounding box
     float fTnear, fTfar; 
