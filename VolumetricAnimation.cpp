@@ -95,6 +95,8 @@ void VolumetricAnimation::OnRender(CommandContext& EngineContext)
 
 void VolumetricAnimation::OnDestroy()
 {
+    m_SparseVolume.OnDestory();
+    m_DenseVolume.OnDestory();
 }
 
 bool VolumetricAnimation::OnEvent(MSG* msg)

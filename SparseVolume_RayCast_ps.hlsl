@@ -138,7 +138,7 @@ float3 getNormal(float3 f3Idx)
 }
 
 void isoSurfaceShading(Ray eyeray, float2 f2NearFar, float fISOValue,
-    inout float4 f4OutColor)
+    inout float4 f4OutColor, inout float fDepth)
 {
     float3 f3P = eyeray.f4o.xyz + eyeray.f4d.xyz * f2NearFar.x;
     float3 f3PreP = f3P;
@@ -155,6 +155,10 @@ void isoSurfaceShading(Ray eyeray, float2 f2NearFar, float fISOValue,
         if (sign(fCurDensity - fISOValue) != sign(fPreDensity - fISOValue)) {
             float3 f3SurfPos = lerp(f3PreP, f3P,
                 (fISOValue - fPreDensity) / (fCurDensity - fPreDensity));
+#if DEPTH_OUT
+            float4 f4ProjPos = mul(mWorldViewProj, float4(f3SurfPos, 1.f));
+            fDepth = f4ProjPos.z / f4ProjPos.w;
+#endif // DEPTH_OUT
 #if USE_NORMAL
             float3 f3Normal = getNormal(
                 f3SurfPos / vParam.fVoxelSize + vParam.u3VoxelReso * 0.5f);
@@ -176,8 +180,8 @@ void isoSurfaceShading(Ray eyeray, float2 f2NearFar, float fISOValue,
 //------------------------------------------------------------------------------
 // Pixel Shader
 //------------------------------------------------------------------------------
-float4 main( float4 f4Pos : POSITION, 
-    float4 f4ProjPos : SV_POSITION ) : SV_Target
+void main( float4 f4Pos : POSITION, float4 f4ProjPos : SV_POSITION,
+    out float4 f4Col : SV_Target, out float fDepth : SV_Depth)
 {
     Ray eyeray;
     //world space
@@ -203,13 +207,14 @@ float4 main( float4 f4Pos : POSITION,
     if (fTnear <= 0) {
         fTnear = 0;
     }
-    float4 f4Col = float4(1.f, 1.f, 1.f, 0.f) * 0.01f;
+    f4Col = float4(1.f, 1.f, 1.f, 0.f) * 0.01f;
+    fDepth = 0.f;
 #if ISO_SURFACE
     isoSurfaceShading(eyeray, float2(fTnear, fTfar),
-        (vParam.fMinDensity + vParam.fMaxDensity) * 0.5f, f4Col);
+        (vParam.fMinDensity + vParam.fMaxDensity) * 0.5f, f4Col, fDepth);
 #else
     accumulatedShading( eyeray, float2(fTnear,fTfar),
         float2(vParam.fMinDensity, vParam.fMaxDensity), f4Col);
 #endif
-    return f4Col;
+    return;
 }

@@ -29,6 +29,7 @@ public:
     ~DenseVolume();
 
     void OnCreateResource();
+    void OnDestory();
     void OnRender( CommandContext& cmdContext, DirectX::XMMATRIX wvp, 
         DirectX::XMFLOAT4 eyePos );
     void RenderGui();

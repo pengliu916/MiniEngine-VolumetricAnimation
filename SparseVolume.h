@@ -33,7 +33,9 @@ public:
     };
 
     SparseVolume();
+    ~SparseVolume();
     void OnCreateResource();
+    void OnDestory();
     void OnResize();
     void OnUpdate();
     void OnRender(CommandContext& cmdContext, const DirectX::XMMATRIX& wvp,

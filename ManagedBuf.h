@@ -36,6 +36,7 @@ public:
     bool ChangeResource(const DirectX::XMUINT3& reso, const Type bufType,
         const Bit bufBit);
     BufInterface GetResource();
+    void Destory();
 
 private:
     void _CreateVolume(const DirectX::XMUINT3 reso,

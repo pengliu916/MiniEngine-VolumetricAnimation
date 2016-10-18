@@ -23,8 +23,7 @@ DenseVolume::DenseVolume()
 
 DenseVolume::~DenseVolume()
 {
-    Graphics::g_cmdListMngr.WaitForFence(Graphics::g_stats.lastFrameEndFence);
-    _resourceState.store(kOldBufferRetired, memory_order_release);
+    OnDestory();
 }
 
 void DenseVolume::OnCreateResource()
@@ -205,6 +204,21 @@ void DenseVolume::OnCreateResource()
 
     _indexBuffer.Create(L"Index Buffer", ARRAYSIZE(cubeIndices),
         sizeof(uint16_t), (void*)cubeIndices);
+}
+
+void DenseVolume::OnDestory()
+{
+    ResourceState curState;
+    while ((curState = _resourceState.load(memory_order_acquire)) != kNormal) {
+        if (curState == kNewBufferReady) {
+            _resourceState.store(kOldBufferRetired, memory_order_release);
+        }
+        this_thread::yield();
+    }
+    _structuredVolumeBuffer[0].Destroy();
+    _structuredVolumeBuffer[1].Destroy();
+    _typedVolumeBuffer[0].Destroy();
+    _typedVolumeBuffer[1].Destroy();
 }
 
 void DenseVolume::OnRender(CommandContext& cmdContext,

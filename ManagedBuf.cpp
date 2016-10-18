@@ -30,11 +30,7 @@ ManagedBuf::ManagedBuf(DXGI_FORMAT format, DirectX::XMUINT3 reso,
 
 ManagedBuf::~ManagedBuf()
 {
-    if (_bufState.load(std::memory_order_acquire) != kNormal) {
-        Graphics::g_cmdListMngr.WaitForFence(
-            Graphics::g_stats.lastFrameEndFence);
-        _bufState.store(kOldBufferRetired, std::memory_order_release);
-    }
+    Destory();
 }
 
 void
@@ -104,6 +100,26 @@ ManagedBuf::GetResource()
         break;
     }
     return result;
+}
+
+void
+ManagedBuf::Destory()
+{
+    ResourceState curState;
+    while ((curState = _bufState.load(std::memory_order_acquire)) != kNormal) {
+        if (curState == kNewBufferReady) {
+            _bufState.store(kOldBufferRetired, std::memory_order_release);
+        }
+        std::this_thread::yield();
+    }
+    _typedBuffer[0].Destroy();
+    _typedBuffer[1].Destroy();
+    _dummyBuffer[0].Destroy();
+    _dummyBuffer[1].Destroy();
+    _volumeBuffer[0].Destroy();
+    _volumeBuffer[1].Destroy();
+    _structBuffer[0].Destroy();
+    _structBuffer[1].Destroy();
 }
 
 void

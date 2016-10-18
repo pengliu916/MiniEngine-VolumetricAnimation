@@ -15,6 +15,7 @@ namespace {
     bool _usePSUpdate = false;
     bool _isoRender = false;
     bool _useNormal = false;
+    bool _writeDepth = false;
 
     // define the geometry for a triangle.
     const XMFLOAT3 cubeVertices[] = {
@@ -40,9 +41,9 @@ namespace {
         [SparseVolume::kNumStruct][SparseVolume::kNumFilter];
     GraphicsPSO _gfxISOSurfRenderPSO
         [ManagedBuf::kNumType][SparseVolume::kNumStruct]
-        [SparseVolume::kNumFilter][SparseVolume::kNumNormal];
+        [SparseVolume::kNumFilter][SparseVolume::kNumNormal][2];
     GraphicsPSO _gfxStepInfoPSO;
-    GraphicsPSO _gfxStepInfoDebugPSO;
+    GraphicsPSO _gfxStepInfoDebugPSO[2];
     ComputePSO _cptFlagVolResetPSO;
     StructuredBuffer _cubeVB;
     ByteAddressBuffer _cubeTriangleStripIB;
@@ -125,7 +126,7 @@ namespace {
             volUpdatePS[ManagedBuf::kNumType][SparseVolume::kNumStruct];
         ComPtr<ID3DBlob> isoRenderPS[ManagedBuf::kNumType]
             [SparseVolume::kNumStruct][SparseVolume::kNumFilter]
-            [SparseVolume::kNumNormal];
+            [SparseVolume::kNumNormal][2];
 
         D3D_SHADER_MACRO macro[] = {
             {"__hlsl", "1"},//0
@@ -136,6 +137,7 @@ namespace {
             {"ENABLE_BRICKS", "0"},//5
             {"ISO_SURFACE", "0"},//6
             {"USE_NORMAL", "0"},//7
+            {"DEPTH_OUT", "0"},//8
             {nullptr, nullptr}
         };
 
@@ -167,10 +169,18 @@ namespace {
                         macro, &raycastPS[i][j][(SparseVolume::FilterType)k]));
                     macro[6].Definition = "1"; // ISO_SURFACE
                     V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1", macro,
-                        &isoRenderPS[i][j][(SparseVolume::FilterType)k][0]));
+                        &isoRenderPS[i][j][(SparseVolume::FilterType)k][0][0]));
+                    macro[8].Definition = "1"; // DEPTH_OUT
+                    V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1", macro,
+                        &isoRenderPS[i][j][(SparseVolume::FilterType)k][0][1]));
+                    macro[8].Definition = "0"; // DEPTH_OUT
                     macro[7].Definition = "1"; // USE_NORMAL
                     V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1", macro,
-                        &isoRenderPS[i][j][(SparseVolume::FilterType)k][1]));
+                        &isoRenderPS[i][j][(SparseVolume::FilterType)k][1][0]));
+                    macro[8].Definition = "1"; // DEPTH_OUT
+                    V(_Compile(L"SparseVolume_RayCast_ps.hlsl", "ps_5_1", macro,
+                        &isoRenderPS[i][j][(SparseVolume::FilterType)k][1][1]));
+                    macro[8].Definition = "0"; // DEPTH_OUT
                     macro[7].Definition = "0"; // USE_NORMAL
                     macro[6].Definition = "0"; // ISO_SURFACE
                 }
@@ -224,18 +234,31 @@ namespace {
                     _gfxVolumeRenderPSO[i][k][j].SetVertexShader(
                         cubeVS->GetBufferPointer(), cubeVS->GetBufferSize());
 
-                    _gfxISOSurfRenderPSO[i][k][j][0] =
+                    _gfxISOSurfRenderPSO[i][k][j][0][0] =
                         _gfxVolumeRenderPSO[i][k][j];
-                    _gfxISOSurfRenderPSO[i][k][j][0].SetPixelShader(
-                        isoRenderPS[i][k][j][0]->GetBufferPointer(),
-                        isoRenderPS[i][k][j][0]->GetBufferSize());
-                    _gfxISOSurfRenderPSO[i][k][j][0].Finalize();
-                    _gfxISOSurfRenderPSO[i][k][j][1] =
+                    _gfxISOSurfRenderPSO[i][k][j][0][0].SetPixelShader(
+                        isoRenderPS[i][k][j][0][0]->GetBufferPointer(),
+                        isoRenderPS[i][k][j][0][0]->GetBufferSize());
+                    _gfxISOSurfRenderPSO[i][k][j][0][0].Finalize();
+                    _gfxISOSurfRenderPSO[i][k][j][0][1] =
                         _gfxVolumeRenderPSO[i][k][j];
-                    _gfxISOSurfRenderPSO[i][k][j][1].SetPixelShader(
-                        isoRenderPS[i][k][j][1]->GetBufferPointer(),
-                        isoRenderPS[i][k][j][1]->GetBufferSize());
-                    _gfxISOSurfRenderPSO[i][k][j][1].Finalize();
+                    _gfxISOSurfRenderPSO[i][k][j][0][1].SetPixelShader(
+                        isoRenderPS[i][k][j][0][1]->GetBufferPointer(),
+                        isoRenderPS[i][k][j][0][1]->GetBufferSize());
+                    _gfxISOSurfRenderPSO[i][k][j][0][1].Finalize();
+
+                    _gfxISOSurfRenderPSO[i][k][j][1][0] =
+                        _gfxVolumeRenderPSO[i][k][j];
+                    _gfxISOSurfRenderPSO[i][k][j][1][0].SetPixelShader(
+                        isoRenderPS[i][k][j][1][0]->GetBufferPointer(),
+                        isoRenderPS[i][k][j][1][0]->GetBufferSize());
+                    _gfxISOSurfRenderPSO[i][k][j][1][0].Finalize();
+                    _gfxISOSurfRenderPSO[i][k][j][1][1] =
+                        _gfxVolumeRenderPSO[i][k][j];
+                    _gfxISOSurfRenderPSO[i][k][j][1][1].SetPixelShader(
+                        isoRenderPS[i][k][j][1][1]->GetBufferPointer(),
+                        isoRenderPS[i][k][j][1][1]->GetBufferSize());
+                    _gfxISOSurfRenderPSO[i][k][j][1][1].Finalize();
 
                     _gfxVolumeRenderPSO[i][k][j].SetPixelShader(
                         raycastPS[i][k][j]->GetBufferPointer(),
@@ -306,12 +329,12 @@ namespace {
         _gfxStepInfoPSO.SetSampleMask(UINT_MAX);
         _gfxStepInfoPSO.SetVertexShader(
             stepInfoVS->GetBufferPointer(), stepInfoVS->GetBufferSize());
-        _gfxStepInfoDebugPSO = _gfxStepInfoPSO;
+        _gfxStepInfoDebugPSO[0] = _gfxStepInfoPSO;
         _gfxStepInfoPSO.SetRasterizerState(Graphics::g_RasterizerTwoSided);
         D3D12_RASTERIZER_DESC rastDesc = Graphics::g_RasterizerTwoSided;
         rastDesc.FillMode = D3D12_FILL_MODE_WIREFRAME;
-        _gfxStepInfoDebugPSO.SetRasterizerState(rastDesc);
-        _gfxStepInfoDebugPSO.SetBlendState(Graphics::g_BlendDisable);
+        _gfxStepInfoDebugPSO[0].SetRasterizerState(rastDesc);
+        _gfxStepInfoDebugPSO[0].SetBlendState(Graphics::g_BlendDisable);
         D3D12_BLEND_DESC blendDesc = {};
         blendDesc.AlphaToCoverageEnable = false;
         blendDesc.IndependentBlendEnable = false;
@@ -327,18 +350,22 @@ namespace {
         _gfxStepInfoPSO.SetBlendState(blendDesc);
         _gfxStepInfoPSO.SetPrimitiveTopologyType(
             D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE);
-        _gfxStepInfoDebugPSO.SetPrimitiveTopologyType(
+        _gfxStepInfoDebugPSO[0].SetPrimitiveTopologyType(
             D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE);
-        _gfxStepInfoDebugPSO.SetRenderTargetFormats(
+        _gfxStepInfoDebugPSO[0].SetRenderTargetFormats(
             1, &ColorFormat, DepthFormat);
         _gfxStepInfoPSO.SetRenderTargetFormats(
             1, &_stepInfoTexFormat, DXGI_FORMAT_UNKNOWN);
         _gfxStepInfoPSO.SetPixelShader(
             stepInfoPS->GetBufferPointer(), stepInfoPS->GetBufferSize());
-        _gfxStepInfoDebugPSO.SetPixelShader(
+        _gfxStepInfoDebugPSO[0].SetPixelShader(
             stepInfoPS->GetBufferPointer(), stepInfoDebugPS->GetBufferSize());
         _gfxStepInfoPSO.Finalize();
-        _gfxStepInfoDebugPSO.Finalize();
+        _gfxStepInfoDebugPSO[1] = _gfxStepInfoDebugPSO[0];
+        _gfxStepInfoDebugPSO[1].SetDepthStencilState(
+            Graphics::g_DepthStateReadOnly);
+        _gfxStepInfoDebugPSO[1].Finalize();
+        _gfxStepInfoDebugPSO[0].Finalize();
 
         const uint32_t vertexBufferSize = sizeof(cubeVertices);
         _cubeVB.Create(L"Vertex Buffer", ARRAYSIZE(cubeVertices),
@@ -366,6 +393,11 @@ SparseVolume::SparseVolume()
     _cbPerCall.uNumOfBalls = 20;
 }
 
+SparseVolume::~SparseVolume()
+{
+    OnDestory();
+}
+
 void
 SparseVolume::OnCreateResource()
 {
@@ -387,6 +419,17 @@ SparseVolume::OnCreateResource()
     }
 
     std::call_once(_psoCompiled_flag, _CreatePSOs);
+}
+
+void
+SparseVolume::OnDestory()
+{
+    _volBuf.Destory();
+    _flagVol.Destroy();
+    _stepInfoTex.Destroy();
+    _cubeVB.Destroy();
+    _cubeTriangleStripIB.Destroy();
+    _cubeLineStripIB.Destroy();
 }
 
 void
@@ -516,6 +559,8 @@ SparseVolume::RenderGui()
         if (_isoRender) {
             ImGui::SameLine();
             ImGui::Checkbox("Use Normal", &_useNormal);
+            ImGui::SameLine();
+            ImGui::Checkbox("WriteDepth", &_writeDepth);
         }
         ImGui::Separator();
 
@@ -797,7 +842,8 @@ SparseVolume::_RenderVolume(GraphicsContext& gfxContext,
     VolumeStruct type = _useStepInfoTex ? kFlagVol : kVoxel;
     if (_isoRender) {
         gfxContext.SetPipelineState(
-            _gfxISOSurfRenderPSO[buf.type][type][_filterType][_useNormal]);
+            _gfxISOSurfRenderPSO
+            [buf.type][type][_filterType][_useNormal][_writeDepth]);
     } else {
         gfxContext.SetPipelineState(
             _gfxVolumeRenderPSO[buf.type][type][_filterType]);
@@ -817,9 +863,14 @@ void
 SparseVolume::_RenderBrickGrid(GraphicsContext& gfxContext)
 {
     GPU_PROFILE(gfxContext, L"Render BrickGrid");
-    gfxContext.SetPipelineState(_gfxStepInfoDebugPSO);
+    gfxContext.SetPipelineState(_gfxStepInfoDebugPSO[_writeDepth]);
     gfxContext.SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINESTRIP);
-    gfxContext.SetRenderTargets(1, &Graphics::g_SceneColorBuffer.GetRTV());
+    if (_writeDepth) {
+        gfxContext.SetRenderTargets(1, &Graphics::g_SceneColorBuffer.GetRTV(),
+            Graphics::g_SceneDepthBuffer.GetDSV());
+    } else {
+        gfxContext.SetRenderTargets(1, &Graphics::g_SceneColorBuffer.GetRTV());
+    }
     gfxContext.SetDynamicDescriptors(3, 1, 1, &_flagVol.GetSRV());
     gfxContext.SetIndexBuffer(_cubeLineStripIB.IndexBufferView());
     const uint3 xyz = _volParam->u3VoxelReso;
